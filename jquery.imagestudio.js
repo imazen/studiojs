@@ -16,10 +16,12 @@
         editWithSemicoloms: false, //If true, semicolon notation will be used with the editing server. 
         finalWithSemicolons: false, //If true, semicolons will be used in the final URLs. Defaults to true if the input URL uses semicolons.
         //A list of commands to temporarily remove from the URL during editing so that position-dependent operations aren't affected.
+        //Any commands used by the editor should be in here also, such as 'cache', 'memcache', 'maxwidth',and 'maxheight'
         suspendKeys: ['width', 'height', 'maxwidth', 'maxheight',
                        'scale', 'rotate', 'flip', 'anchor',
                        'paddingwidth', 'paddingcolor', 'borderwidth', 'bordercolor', 'margin',
-                       'cache', 'process', 'shadowwidth', 'shadowcolor', 'shadowoffset'],
+                       'cache', 'memcache', 'process', 'shadowwidth', 'shadowcolor', 'shadowoffset'],
+        editingCommands: { cache: 'no', memcache: 'true' },
         onchange: null, //The callback to fire whenever an edit occurs.
         cropratios: [[0, "Custom"], ["current", "Current"], [4 / 3, "4:3"], [16 / 9, "16:9 (Widescreen)"], [3 / 2, "3:2"]],
         cropPreview: { width: '200px', height: '200px', 'margin-left': '-15px' },
@@ -63,7 +65,10 @@
             posterize: 'Posterize',
             blur: 'Gaussian Blur',
             pane_redeye: 'Red-Eye Removal',
-            redeyeauto: 'Automatic',
+            redeye_auto: 'Auto-detect',
+            redeye_start: 'Remove red-eyes',
+            redeye_preview: 'Preview Result',
+            redeye_clear: 'Clear',
             cancel: 'Cancel',
             done: 'Done',
             pane_carve: 'Object Removal'
@@ -135,6 +140,7 @@
             var withConstraints = new ImageResizing.ResizeSettings(opts.filteredQuery);
             withConstraints.maxwidth = div.width() - opts.accordionWidth - 30;
             withConstraints.maxheight = opts.height;
+            withConstraints.mergeWith(opts.editingCommands, true);
 
             opts.editQuery = withConstraints;
             opts.editUrl = opts.editPath + withConstraints.toQueryString(opts.editWithSemicolons);
@@ -165,7 +171,9 @@
                 var path = params.useEditingServer ? opts.editPath : opts.original.path;
 
                 var q = new ImageResizing.ResizeSettings(opts.editQuery);
-                if (params.removeEditingConstraints) q.remove(opts.suspendKeys);
+                if (params.removeEditingConstraints) {
+                    q.remove(opts.suspendKeys);
+                }
                 if (params.restoreSuspendedCommands) q.mergeWith(opts.suspendedItems);
 
                 var url = params.useEditingServer ? q.toQueryString(opts.editWithSemicolons) : q.toQueryString(opts.finalWithSemicolons);
@@ -321,6 +329,8 @@
         var closure = {};
         var cl = closure;
         cl.img = opts.img;
+        cl.opts = opts;
+
         var getCachedJson = function (url, done, fail) {
             if (window.cachedJson == null) window.cachedJson = {};
             var result = window.cachedJson[url];
@@ -344,6 +354,7 @@
 
         var startRedEye = function (data) {
             closure.info = data;
+
             auto.show();
             clear.show();
             preview.show();
@@ -351,6 +362,12 @@
             done.show();
             cl.rects = parseRects(opts.editQuery['r.eyes']);
             if (cl.rects.length == 0) addRects(data.features);
+
+            cl.opts.imgDiv.css('padding-left', (cl.opts.imgDiv.width() - cl.img.width()) / 2 + 1);
+            cl.opts.imgDiv.css('text-align', 'left');
+            cl.opts.imgDiv.height(cl.img.height());
+            cl.img.css('position', 'absolute');
+            
             showSelection();
         };
 
@@ -367,6 +384,12 @@
             auto.hide();
             start.show();
             reset.show();
+
+            cl.img.attr('style', ''); //Remove the position-abosolute stuff.
+            cl.opts.imgDiv.css('padding-left', 0); //undo horizontal align fix
+            cl.opts.imgDiv.css('text-align', 'center');
+            cl.opts.imgDiv.css('height', 'auto');
+            opts.accordion.accordion("enable");
         };
         var addRects = function (rects) {
             if (rects == null || rects.length == 0) return;
@@ -395,11 +418,11 @@
                 var y = cr.y / (d.dh / d.croph) + d.cropy;
                 var w = cr.w / (d.dw / d.cropw);
                 var h = cr.h / (d.dh / d.croph);
-                r = { X: x, Y: y, X2: x + w, Y2: y + h,accuracy:cr.accuracy};
+                r = { X: x, Y: y, X2: x + w, Y2: y + h, accuracy: cr.accuracy };
                 cl.rects.push(r);
             }
 
-            var rect = $('<div></div>').addClass('red-eye-rect').width(cr.w).height(cr.h).css('z-order', 2000).appendTo(cl.container).show().position({ my: 'left top', at: 'left top', collision: 'none', of: cl.container, offset: cr.x.toString() + ' ' + cr.y.toString() });
+            var rect = $('<div></div>').addClass('red-eye-rect').width(cr.w).height(cr.h).css({ 'position': 'absolute', 'z-order': 2000 }).appendTo(cl.container).show().position({ my: 'left top', at: 'left top', collision: 'none', of: cl.container, offset: cr.x.toString() + ' ' + cr.y.toString() });
             rect.css('border', '1px solid green');
             rect.data('rect', r);
             rect.click(onClickRect);
@@ -407,8 +430,9 @@
         };
         var showSelection = function () {
             var d = cl.info;
+            cl.enabled = true;
 
-            cl.container = $('<div></div').addClass('red-eye-container').width(d.dw).height(d.dh).css('z-order', 1000).insertAfter(cl.img).show().position({ my: 'left top', at: 'left top', collision: 'none', of: cl.img, offset: '0 ' + d.dy });
+            cl.container = $('<div></div').addClass('red-eye-container').css({ 'position': 'absolute', 'z-order': 1000 }).insertAfter(cl.img).show().position({ my: 'left top', at: 'left top', collision: 'none', of: cl.img, offset: '0 ' + d.dy }).width(d.dw).height(d.dh);
             for (var i = 0; i < cl.rects.length; i++) {
                 addRect(cl.rects[i]);
             }
@@ -444,7 +468,7 @@
                         ch += 24;
                         accuracy = 5;
                     }
-                    addRect(null, { x: cx, y: cy, w: cw, h: ch, accuracy:accuracy });
+                    addRect(null, { x: cx, y: cy, w: cw, h: ch, accuracy: accuracy });
 
                 }
             });
@@ -453,6 +477,7 @@
         };
         var hideSelection = function () {
             cl.container.remove();
+            cl.enabled = false;
         };
 
         var parseRects = function (str) {
@@ -490,9 +515,13 @@
         // 2) If r.eyes is empty, automatically select the eyes
         // 3) Show 'Clear', 'Auto-detect', "Done', 'Preview' toggle, and 'Cancel buttons.
         // 4) Automatic rects get a accuracy rating of 0, single clicks 1, and manual rectangles 2.
-        var start = button(opts, 'redeyestart', null, function () {
+        var start = button(opts, 'redeye_start', null, function () {
             reset.hide();
             start.hide();
+            opts.accordion.accordion("disable");
+            c.removeClass("ui-state-disabled");
+            c.removeClass("ui-accordion-disabled");
+            opts.accordion.removeClass("ui-state-disabled");
             var o = opts;
             var q = new ImageResizing.ResizeSettings(o.editQuery);
             q.remove("r.eyes");
@@ -509,25 +538,28 @@
         }).appendTo(c);
 
 
-        var auto = button(opts, 'redeyeauto', null, function () {
+        var auto = button(opts, 'redeye_auto', null, function () {
             addRects(cl.info.features);
             hideSelection();
             showSelection();
         }).appendTo(c).hide();
 
-        var clear = button(opts, 'redeyeclear', null, function () {
+        var clear = button(opts, 'redeye_clear', null, function () {
             cl.rects = [];
             hideSelection();
             showSelection();
         }).appendTo(c).hide();
         $('<br />').appendTo(c);
 
-        var preview = button(opts, 'redeyepreview', null, function () {
-            //Apply or remove 
-            cl.img.attr('src', getFixedUrl());
-            hideSelection();
-            //cl.img.attr('src',closure.baseUrl);
-            //showSelection();
+        var preview = button(opts, 'redeye_preview', null, function () {
+            if (cl.enabled) {
+                //Apply or remove 
+                cl.img.attr('src', getFixedUrl());
+                hideSelection();
+            } else {
+                cl.img.attr('src', closure.baseUrl);
+                showSelection();
+            }
 
         }).appendTo(c).hide();
 
