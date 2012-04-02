@@ -85,7 +85,7 @@ rs.prototype.toggle = function (key, defaultValue, deleteIf) {
     if ((/flip\.[xy]$/i).test(key)) {
         var lastchar = key.charAt(key.length - 1);
         key = key.substring(0, key.length - 2);
-        if (key.charAt(0) == 's') this.rotateFlipCrop(0, lastchar == 'x', lastchar == 'y'); //Must call before changing flip value. Have to undo x flip, then reapply x or y flip.
+        if (key.charAt(0) == 's') this.rotateFlipCoords(0, lastchar == 'x', lastchar == 'y'); //Must call before changing flip value. Have to undo x flip, then reapply x or y flip.
         var val = ir.Utils.toggleFlip(this[key], lastchar == 'x', lastchar == 'y'); 
         if (val == "00") delete this[key];
         else this[key] = val;
@@ -101,7 +101,7 @@ rs.prototype.increment = function (key, offset, cycleLimit, defaultValue) {
     defaultValue = defaultValue ? defaultValue : 0;
     var val = (this[key] === undefined | this[key] === null) ? defaultValue : parseFloat(this[key]);
     val = (val + offset) % cycleLimit;
-    if (key == "srotate") this.rotateFlipCrop(offset, false,false);
+    if (key == "srotate") this.rotateFlipCoords(offset, false, false);
     this[key] = val;
     
 };
@@ -118,20 +118,68 @@ rs.prototype.setCrop = function (cropObj) {
     new ir.CropRectangle(cropObj).pushTo(this);
 };
 
+rs.prototype.getEyeRects = function () {
+    var str = this['r.eyes'];
+    if (str == null || str.length == 0) return [];
+    var parts = str.split(',');
+    var rects = [];
+    for (var i = 0; i < parts.length / 5; i++) {
+        var x = parseFloat(parts[i * 5]);
+        var y = parseFloat(parts[i * 5 + 1]);
+        var w = parseFloat(parts[i * 5 + 2]);
+        var h = parseFloat(parts[i * 5 + 3]);
+        var a = parseFloat(parts[i * 5 + 4]);
+        rects.push({ X: x, Y: y, X2: x + w, Y2: y + h, accuracy: a });
+    }
+    return rects; 
+};
+rs.prototype.setEyeRects = function (rects) {
+    var str = "";
+    for (var i = 0; i < rects.length; i++) {
+        var r = rects[i];
+        str += Math.round(r.X).toString() + "," + Math.round(r.Y).toString() +
+                 "," + Math.round(r.X2 - r.X).toString() + "," + Math.round(r.Y2 - r.Y).toString() + "," + r.accuracy.toString() + ",";
+    }
+    this['r.eyes'] = str.length > 0 ? str.substr(0, str.length - 1) : null;
+    if (this['r.eyes'] == null) delete this['r.eyes'];
+};
+
 rs.prototype.resetSourceRotateFlip = function () {
     var oldFlip = ir.Utils.parseFlip(this.sflip);
-    this.rotateFlipCrop(this.srotate ? -parseFloat(this.srotate) : 0, oldFlip.x, oldFlip.y);
+    this.rotateFlipCoords(this.srotate ? -parseFloat(this.srotate) : 0, oldFlip.x, oldFlip.y);
     delete this.srotate;
     delete this.sflip;
 };
 
-rs.prototype.rotateFlipCrop = function (rot, fx, fy) {
+rs.prototype.rotateFlipCoords = function (rot, fx, fy) {
+    var oldFlip = ir.Utils.parseFlip(this.sflip);
+    var oldAngle = parseFloat(this.srotate ? this.srotate : "0");
+
+
+    //Rotate eyes.
+    if (this['r.eyes'] && this['r.iw'] && this['r.ih']) {
+        var h = parseInt(this['r.ih']);
+        var w = parseInt(this['r.iw']);
+
+        var rects = this.getEyeRects();
+        for (var i = 0; i < rects.length; i++) {
+            var r = rects[i];
+            var newr = ir.Utils.flipRotateRect(r.X, r.Y, r.X2, r.Y2, w, h, oldAngle, oldAngle + rot, oldFlip.x, oldFlip.x ^ fx, oldFlip.y, oldFlip.y ^ fy);
+
+            rects[i] = { X: newr.x1, Y: newr.y1, X2: newr.x2, Y2: newr.y2, accuracy: r.accuracy };
+
+            this['r.ih'] = newr.yunits;
+            this['r.iw'] = newr.xunits;
+        }
+        this.setEyeRects(rects);
+
+    }
+
     var c = this.getCrop();
     //Only rotate if all items are present.
     if (!c.allPresent()) return;
-    var oldFlip = ir.Utils.parseFlip(this.sflip);
-    var oldAngle = parseFloat(this.srotate ? this.srotate : "0");
-    var r = ir.Utils.flipRotateRect(c.x1, c.y1, c.x2, c.y2, c.xunits, c.yunits, oldAngle, oldAngle + rot,oldFlip.x, oldFlip.x ^ fx,oldFlip.y, oldFlip.y ^ fy);
+
+    var r = ir.Utils.flipRotateRect(c.x1, c.y1, c.x2, c.y2, c.xunits, c.yunits, oldAngle, oldAngle + rot, oldFlip.x, oldFlip.x ^ fx, oldFlip.y, oldFlip.y ^ fy);
     this.setCrop(r);
 };
 
