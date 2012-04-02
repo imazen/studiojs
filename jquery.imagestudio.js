@@ -20,7 +20,7 @@
         suspendKeys: ['width', 'height', 'maxwidth', 'maxheight',
                        'scale', 'rotate', 'flip', 'anchor',
                        'paddingwidth', 'paddingcolor', 'borderwidth', 'bordercolor', 'margin',
-                       'cache', 'memcache', 'process', 'shadowwidth', 'shadowcolor', 'shadowoffset'],
+                       'cache', 'memcache', 'process', 'shadowwidth', 'shadowcolor', 'shadowoffset', 'mode'],
         editingCommands: { cache: 'no', memcache: 'true' },
         onchange: null, //The callback to fire whenever an edit occurs.
         cropratios: [[0, "Custom"], ["current", "Current"], [4 / 3, "4:3"], [16 / 9, "16:9 (Widescreen)"], [3 / 2, "3:2"]],
@@ -65,8 +65,8 @@
             posterize: 'Posterize',
             blur: 'Gaussian Blur',
             pane_redeye: 'Red-Eye Removal',
-            redeye_auto: 'Auto-detect',
-            redeye_start: 'Remove red-eyes',
+            redeye_auto: 'Auto-detect Eyes',
+            redeye_start: 'Fix Red-Eye',
             redeye_preview: 'Preview Result',
             redeye_clear: 'Clear',
             cancel: 'Cancel',
@@ -167,7 +167,7 @@
                 updateOptions();
             },
             getStatus: function (params) {
-                $.extend(params, { 'restoreSuspendedCommands': true, 'removeEditingConstraints': true, 'useEditingServer': false });
+                params = $.extend(params, { 'restoreSuspendedCommands': true, 'removeEditingConstraints': true, 'useEditingServer': false });
                 var path = params.useEditingServer ? opts.editPath : opts.original.path;
 
                 var q = new ImageResizing.ResizeSettings(opts.editQuery);
@@ -177,7 +177,7 @@
                 if (params.restoreSuspendedCommands) q.mergeWith(opts.suspendedItems);
 
                 var url = params.useEditingServer ? q.toQueryString(opts.editWithSemicolons) : q.toQueryString(opts.finalWithSemicolons);
-                return { url: url, query: q, path: path };
+                return { url: path + url, query: q, path: path };
             },
             destroy: function () {
                 div.data('ImageStudio', null);
@@ -360,14 +360,14 @@
             preview.show();
             cancel.show();
             done.show();
-            cl.rects = parseRects(opts.editQuery['r.eyes']);
+            cl.rects = opts.editQuery.getEyeRects();
             if (cl.rects.length == 0) addRects(data.features);
 
             cl.opts.imgDiv.css('padding-left', (cl.opts.imgDiv.width() - cl.img.width()) / 2 + 1);
             cl.opts.imgDiv.css('text-align', 'left');
             cl.opts.imgDiv.height(cl.img.height());
             cl.img.css('position', 'absolute');
-            
+
             showSelection();
         };
 
@@ -391,15 +391,17 @@
             cl.opts.imgDiv.css('height', 'auto');
             opts.accordion.accordion("enable");
         };
+        var hashrect = function (e) { return e.X + e.Y * 1000 + e.X2 * 100000 * e.Y2 * 1000000 };
         var addRects = function (rects) {
             if (rects == null || rects.length == 0) return;
             //merge with cl.rects, eliminating duplicates
-            cl.rects = _.uniq((cl.rects ? cl.rects : []).concat(_.reject(rects, function (e) { e.Feature !== 0 })), false, function (e) { e.X + e.Y * 1000 + e.X2 * 100000 * e.Y2 * 1000000 });
+            cl.rects = _.uniq((cl.rects ? cl.rects : []).concat(_.reject(rects, function (e) { return e.Feature !== 0 })), false, hashrect);
         };
         var onClickRect = function () {
             var r = $(this).data('rect');
             $(this).remove();
-            cl.rects = _.reject(cl.rects, function (val) { val === r });
+            cl.rects = _.reject(cl.rects, function (val) { return hashrect(val) == hashrect(r) });
+            cl.container.data('down', null);
         };
 
         var addRect = function (rect, clientrect) {
@@ -421,6 +423,8 @@
                 r = { X: x, Y: y, X2: x + w, Y2: y + h, accuracy: cr.accuracy };
                 cl.rects.push(r);
             }
+            //Don't add rectangle if it's out of bounds. silently keep it, in case we change the crop, though.
+            if (cr.x < 0 || cr.y < 0 || cr.x + cr.w > cl.container.width() || cr.y + cr.h > cl.container.height()) return;
 
             var rect = $('<div></div>').addClass('red-eye-rect').width(cr.w).height(cr.h).css({ 'position': 'absolute', 'z-order': 2000 }).appendTo(cl.container).show().position({ my: 'left top', at: 'left top', collision: 'none', of: cl.container, offset: cr.x.toString() + ' ' + cr.y.toString() });
             rect.css('border', '1px solid green');
@@ -449,10 +453,11 @@
             });
 
             cl.container.mouseup(function (evt) {
+                if (cl.container[0] != this) return; //No bubbled events
                 if (evt.which == 1) {
                     var down = cl.container.data('down');
                     if (down == null) return;
-
+                    cl.container.data('down', null);
                     var cx = down.x;
                     var cy = down.y;
                     var cw = (evt.offsetX - cx);
@@ -480,33 +485,12 @@
             cl.enabled = false;
         };
 
-        var parseRects = function (str) {
-            if (str == null || str.length == 0) return [];
-            var parts = str.split(',');
-            var rects = [];
-            for (var i = 0; i < parts.length / 5; i++) {
-                var x = parseFloat(parts[i * 5]);
-                var y = parseFloat(parts[i * 5 + 1]);
-                var w = parseFloat(parts[i * 5 + 2]);
-                var h = parseFloat(parts[i * 5 + 3]);
-                var a = parseFloat(parts[i * 5 + 4]);
-                rects.push({ X: x, Y: y, X2: x + w, Y2: y + h, accuracy: a });
-            }
-            return rects; //parse str into collection of rects
-        };
-        var serialize = function (rects) {
-            //Serialize cl.rects into list
-            var str = "";
-            for (var i = 0; i < rects.length; i++) {
-                var r = rects[i];
-                str += Math.round(r.X).toString() + "," + Math.round(r.Y).toString() +
-                 "," + Math.round(r.X2 - r.X).toString() + "," + Math.round(r.Y2 - r.Y).toString() + "," + r.accuracy.toString() + ",";
-            }
-            return str.length > 0 ? str.substr(0, str.length - 1) : null;
-        };
+   
         var getFixedUrl = function () {
             var q = new ImageResizing.ResizeSettings(opts.editQuery);
-            q['r.eyes'] = serialize(cl.rects);
+            q.setEyeRects(cl.rects);
+            q['r.iw'] = cl.info.ow;
+            q['r.ih'] = cl.info.oh;
             return opts.editPath + q.toQueryString(opts.editWithSemicolons);
         };
         //When entering red-eye mode
@@ -533,6 +517,8 @@
             getCachedJson(closure.jsonUrl, startRedEye, function () {
                 start.show();
                 reset.show();
+                opts.accordion.accordion("enable");
+                closure.img.attr('src', opts.editUrl);
             });
 
         }).appendTo(c);
