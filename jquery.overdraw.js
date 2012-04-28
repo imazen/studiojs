@@ -1,32 +1,62 @@
+/*
+* All javascript in this file is released under the MIT license. 
+*
+* jQuery OverDraw Plugin Copyright(c) 2012 Nathanael Jones
+* Created by Andrei http://www.vworker.com/RentACoder/DotNet/SoftwareCoders/ShowBioInfo.aspx?lngAuthorId=6970132
+* 
+* Custom LZ* compression system written by Nathanael Jones
+*
+* Permission is hereby granted, free of charge, to any person
+* obtaining a copy of this software and associated documentation
+* files (the "Software"), to deal in the Software without
+* restriction, including without limitation the rights to use,
+* copy, modify, merge, publish, distribute, sublicense, and/or sell
+* copies of the Software, and to permit persons to whom the
+* Software is furnished to do so, subject to the following
+* conditions:
+*
+* The above copyright notice and this permission notice shall be
+* included in all copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+* OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+* HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+* WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+* FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+* OTHER DEALINGS IN THE SOFTWARE.
+
+* The Base64U Encode/decode methods are derived from the MIT-licensed Base64 library by Nick Galbreath
+* Copyright (c) 2010 Nick Galbreath
+* http://code.google.com/p/stringencoders/source/browse/#svn/trunk/javascript
+*
+* Permission is hereby granted, free of charge, to any person
+* obtaining a copy of this software and associated documentation
+* files (the "Software"), to deal in the Software without
+* restriction, including without limitation the rights to use,
+* copy, modify, merge, publish, distribute, sublicense, and/or sell
+* copies of the Software, and to permit persons to whom the
+* Software is furnished to do so, subject to the following
+* conditions:
+*
+* The above copyright notice and this permission notice shall be
+* included in all copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+* OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+* HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+* WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+* FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+* OTHER DEALINGS IN THE SOFTWARE.
+*/
+
 (function ($) {
 
 
-    /*
-    * Base64URL Encode/decode Copyright(c) 2011 Nathanael Jones
-    * Base64 Encode Copyright (c) 2010 Nick Galbreath
-    * http://code.google.com/p/stringencoders/source/browse/#svn/trunk/javascript
-    *
-    * Permission is hereby granted, free of charge, to any person
-    * obtaining a copy of this software and associated documentation
-    * files (the "Software"), to deal in the Software without
-    * restriction, including without limitation the rights to use,
-    * copy, modify, merge, publish, distribute, sublicense, and/or sell
-    * copies of the Software, and to permit persons to whom the
-    * Software is furnished to do so, subject to the following
-    * conditions:
-    *
-    * The above copyright notice and this permission notice shall be
-    * included in all copies or substantial portions of the Software.
-    *
-    * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-    * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
-    * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-    * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
-    * HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
-    * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-    * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
-    * OTHER DEALINGS IN THE SOFTWARE.
-    */
+
 
     var base64u = {};
     base64u.PADCHAR = '=';
@@ -273,7 +303,7 @@
 	    var input = public.single.string(data);
 	    input = input.length === 0 ? 0 : input;
 
-	    return data.stride + "|" + str_pack(input);
+	    return data.block_count + "|" + str_pack(input);
 	}
         }
 , chain: {
@@ -306,7 +336,7 @@
 	}
 	, unpack: function (data, compressed) {
 	    var string = compressed.split('|');
-	    if (data.stride != parseInt(string[0])) throw new Error("Stride mismatch - attempted to load data with stride " + string[0] + " instead of " + data.stride);
+	    if (data.block_count != parseInt(string[0])) throw new Error("Block count mismatch - attempted to load data with block count " + string[0] + " instead of " + data.block_count);
 	    var unpacked = str_unpack(string[1]);
 	    public.chain.load(data, unpacked);
 	}
@@ -493,11 +523,13 @@
             , controlParent = (mixed !== undefined) ? mixed.controlParent : null
 			;
                 $img.data('canvasDraw', data = {
+                   
                     blocks: []
 			, $canvas: $('<canvas width="' + width + '" height="' + height + '" />').css('opacity', '0.5')
 			, $span_relative: $('<div />', { style: 'position: relative;' })
 			, $span_absolute: $('<span />', { style: 'position: absolute; top: 0; left: 0;' })
 			, $span_toolbar: $('<span />')
+            , block_count: C
 			, block_size: Math.floor(Math.sqrt(width * height / C))
 			, toolbox: {}
                 });
