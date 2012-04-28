@@ -71,7 +71,9 @@
             redeye_clear: 'Clear',
             cancel: 'Cancel',
             done: 'Done',
-            pane_carve: 'Object Removal'
+            pane_carve: 'Object Removal',
+            carve_start: 'Remove objects',
+            carve_preview: 'Preview result'
 
         }
     };
@@ -266,6 +268,26 @@
     var h3 = function (opts, id, container) {
         return $("<h3 />").text(opts.labels[id] ? opts.labels[id] : "text-not-set").addClass(id).appendTo(container);
     };
+
+    var lockAccordion = function (opts, currentPaneDiv) {
+        opts.accordion.accordion("disable");
+        currentPaneDiv.removeClass("ui-state-disabled");
+        currentPaneDiv.removeClass("ui-accordion-disabled");
+        opts.accordion.removeClass("ui-state-disabled");
+    };
+    var freezeImage = function (opts) {
+        opts.imgDiv.css('padding-left', (opts.imgDiv.width() - opts.img.width()) / 2 + 1);
+        opts.imgDiv.css('text-align', 'left');
+        opts.imgDiv.height(opts.img.height());
+        opts.img.css('position', 'absolute');
+    };
+    var unFreezeImage = function (opts) {
+        opts.img.attr('style', ''); //Remove the position-abosolute stuff.
+        opts.imgDiv.css('padding-left', 0); //undo horizontal align fix
+        opts.imgDiv.css('text-align', 'center');
+        opts.imgDiv.css('height', 'auto');
+    };
+
     //Adds a pane for rotating and flipping the source image
     var addRotateFlipPane = function (opts) {
         var c = $('<div></div>');
@@ -275,15 +297,6 @@
         button(opts, 'fliphorizontal', function (obj) { obj.toggle("sflip.x"); }).appendTo(c);
         button(opts, 'reset', function (obj) { obj.resetSourceRotateFlip() }).appendTo(c);
 
-
-        //    var lRot = $("<h3></h3>").appendTo(c).hide();
-        //    var updateLabels = function (e, obj) {
-        //        var f = ImageResizing.Utils.parseFlip(obj["sflip"]);
-        //        lRot.text("Image rotated " + (!obj["srotate"] ? 0 : (obj["srotate"] % 360)) + " degrees and " +
-        //         (f.x ? ("flipped horizontally " + (f.y ? " and vertically" : "")) : (f.y ? "flipped vertically" : "not flipped")));
-        //    }
-        //    updateLabels(null, getObj(opts));
-        //    opts.img.bind('query', updateLabels);
         return c;
     };
 
@@ -363,11 +376,7 @@
             cl.rects = opts.editQuery.getEyeRects();
             if (cl.rects.length == 0) addRects(data.features);
 
-            cl.opts.imgDiv.css('padding-left', (cl.opts.imgDiv.width() - cl.img.width()) / 2 + 1);
-            cl.opts.imgDiv.css('text-align', 'left');
-            cl.opts.imgDiv.height(cl.img.height());
-            cl.img.css('position', 'absolute');
-
+            freezeImage(cl.opts);
             showSelection();
         };
 
@@ -384,11 +393,7 @@
             auto.hide();
             start.show();
             reset.show();
-
-            cl.img.attr('style', ''); //Remove the position-abosolute stuff.
-            cl.opts.imgDiv.css('padding-left', 0); //undo horizontal align fix
-            cl.opts.imgDiv.css('text-align', 'center');
-            cl.opts.imgDiv.css('height', 'auto');
+            unFreezeImage(cl.opts);
             opts.accordion.accordion("enable");
         };
         var hashrect = function (e) { return e.X + e.Y * 1000 + e.X2 * 100000 * e.Y2 * 1000000 };
@@ -440,8 +445,6 @@
             for (var i = 0; i < cl.rects.length; i++) {
                 addRect(cl.rects[i]);
             }
-
-
             cl.container.mousedown(function (evt) {
                 if (evt.which == 2) {
                 }
@@ -485,7 +488,7 @@
             cl.enabled = false;
         };
 
-   
+
         var getFixedUrl = function () {
             var q = new ImageResizing.ResizeSettings(opts.editQuery);
             q.setEyeRects(cl.rects);
@@ -502,10 +505,8 @@
         var start = button(opts, 'redeye_start', null, function () {
             reset.hide();
             start.hide();
-            opts.accordion.accordion("disable");
-            c.removeClass("ui-state-disabled");
-            c.removeClass("ui-accordion-disabled");
-            opts.accordion.removeClass("ui-state-disabled");
+            lockAccordion(opts, c);
+
             var o = opts;
             var q = new ImageResizing.ResizeSettings(o.editQuery);
             q.remove("r.eyes");
@@ -570,37 +571,71 @@
     var addCarvePane = function (opts) {
         var c = $('<div></div>');
 
-        //    button(img, "Remove objects", null, function (obj) {
+        var cl = {};
+        cl.img = opts.img;
+        cl.opts = opts;
 
-        //    }).appendTo(c);
-        //    
-        //    button(img, "Mark areas to remove", "pencil", function (obj) {
+        var start = button(opts, 'carve_start', null, function () {
+            reset.hide(); start.hide();
+            lockAccordion(opts, c);
+            var o = opts;
+            var q = new ImageResizing.ResizeSettings(o.editQuery);
+            cl.packedData = o.editQuery["carve.data"];
+            q.remove("carve.data");
+            cl.baseUrl = o.editPath + q.toQueryString(o.editWithSemicolons);
+            opts.img.attr('src', cl.baseUrl); //Undo current seam carving
+            freezeImage(opts);
+            var image = new Image();
+            image.onload = function () {
+                cl.w = image.width;
+                cl.h = image.height;
+                startCarve();
+            };
+            image.src = cl.baseUrl;
 
-        //    }).appendTo(c);
+        }).appendTo(c);
 
-        //    button(img, "Mark areas to preserve", null, function (obj) {
+        var startCarve = function () {
+            done.show();
+            cancel.show();
+            cl.img.canvasDraw({ C: 1000, controlParent:c });
+            if (cl.packedData) cl.img.canvasDraw('unpack', cl.packedData);
+        };
+        var getFixedUrl = function () {
+            var o = cl.opts;
+            var q = new ImageResizing.ResizeSettings(o.editQuery);
+            q["carve.data"] = cl.packedData;
+            return o.editPath + q.toQueryString(o.editWithSemicolons);
+        }
+        var stopDrawing = function (save) {
+            cl.packedData = cl.img.canvasDraw('pack');
+            cl.img.canvasDraw('unload');
+            if (save)
+                setUrl(opts, getFixedUrl(), false);
+            else
+                cl.img.attr('src', opts.editUrl);
+            done.hide();
+            cancel.hide();
+            start.show();
+            reset.show();
 
-        //    }).appendTo(c);
-        //    c.append("<h3>Brush size</h3>");
-        //    $("<div></div>").slider({ min: 0, max: 15, value: 0,
-        //        change: function (event, ui) {
-        //            edit(opts, function (obj) {
-        //                obj["a.sharpen"] = ui.value;
-        //            });
-        //        }
-        //    }).appendTo(c);
+            unFreezeImage(opts);
+            opts.accordion.accordion("enable");
+        };
 
-        //    button(img, "Clear", null, function (obj) {
 
-        //    }).appendTo(c);
 
-        //    button(img, "Done", null, function (obj) {
+        var cancel = button(opts, 'cancel', null, function () {
+            stopDrawing(false);
+        }).appendTo(c).hide();
 
-        //    }).appendTo(c);
+        var done = button(opts, 'done', null, function () {
+            stopDrawing(true);
+        }).appendTo(c).hide();
 
-        //    button(img, "Reset", null, function (obj) {
-
-        //    }).appendTo(c);
+        var reset = button(opts, 'reset', function (obj) {
+            obj.remove("carve.data");
+        }).appendTo(c);
 
         return c;
     };
