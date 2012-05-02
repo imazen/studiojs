@@ -20,8 +20,8 @@
         suspendKeys: ['width', 'height', 'maxwidth', 'maxheight',
                        'scale', 'rotate', 'flip', 'anchor',
                        'paddingwidth', 'paddingcolor', 'borderwidth', 'bordercolor', 'margin',
-                       'cache', 'memcache', 'process', 'shadowwidth', 'shadowcolor', 'shadowoffset', 'mode'],
-        editingCommands: { cache: 'no', memcache: 'true' },
+                       'cache', 'scache', 'process', 'shadowwidth', 'shadowcolor', 'shadowoffset', 'mode'],
+        editingCommands: { cache: 'no', scache: 'mem' },
         onchange: null, //The callback to fire whenever an edit occurs.
         cropratios: [[0, "Custom"], ["current", "Current"], [4 / 3, "4:3"], [16 / 9, "16:9 (Widescreen)"], [3 / 2, "3:2"]],
         cropPreview: { width: '200px', height: '200px', 'margin-left': '-15px' },
