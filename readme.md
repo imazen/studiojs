@@ -4,7 +4,7 @@ StudioJS is a rapidly growing collection of jQuery plugins for image cropping, r
 
 It is under the MIT license. 
 
-For a live demo,  [click here](http://nathanaeljones.github.com/studiojs/studio.html).
+For a live demo,  [click here](http://studio.imageresizing.net/studio.html).
 
 ## Overview of files
 
