@@ -449,6 +449,11 @@
                 if (evt.which == 2) {
                 }
                 if (evt.which == 1) {
+										if(typeof evt.offsetX === "undefined" || typeof evt.offsetY === "undefined") {
+										   var targetOffset = $(evt.target).offset();
+										   evt.offsetX = evt.pageX - targetOffset.left;
+										   evt.offsetY = evt.pageY - targetOffset.top;
+										}
                     //var offset = $(this).offset();
                     cl.container.data('down', { x: evt.offsetX, y: evt.offsetY });
                     evt.preventDefault();
@@ -456,6 +461,12 @@
             });
 
             cl.container.mouseup(function (evt) {
+								if(typeof evt.offsetX === "undefined" || typeof evt.offsetY === "undefined") {
+								   var targetOffset = $(evt.target).offset();
+								   evt.offsetX = evt.pageX - targetOffset.left;
+								   evt.offsetY = evt.pageY - targetOffset.top;
+								}
+							
                 if (cl.container[0] != this) return; //No bubbled events
                 if (evt.which == 1) {
                     var down = cl.container.data('down');
