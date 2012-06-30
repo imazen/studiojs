@@ -434,14 +434,16 @@
             var rect = $('<div></div>').addClass('red-eye-rect').width(cr.w).height(cr.h).css({ 'position': 'absolute', 'z-order': 2000 }).appendTo(cl.container).show().position({ my: 'left top', at: 'left top', collision: 'none', of: cl.container, offset: cr.x.toString() + ' ' + cr.y.toString() });
             rect.css('border', '1px solid green');
             rect.data('rect', r);
-            rect.click(onClickRect);
+            rect.mouseup(onClickRect);
 
         };
         var showSelection = function () {
             var d = cl.info;
             cl.enabled = true;
 
-            cl.container = $('<div></div').addClass('red-eye-container').css({ 'position': 'absolute', 'z-order': 1000 }).insertAfter(cl.img).show().position({ my: 'left top', at: 'left top', collision: 'none', of: cl.img, offset: '0 ' + d.dy }).width(d.dw).height(d.dh);
+            cl.container = $('<div></div>').addClass('red-eye-container').css({ 'position': 'absolute', 'z-order': 1000 }).insertAfter(cl.img).show().position({ my: 'left top', at: 'left top', collision: 'none', of: cl.img, offset: '0 ' + d.dy }).width(d.dw).height(d.dh);
+            $(cl.img).hide();
+            $(cl.container).css({ 'backgroundImage': 'url(' + $(cl.img).attr('src') + ')' });
             for (var i = 0; i < cl.rects.length; i++) {
                 addRect(cl.rects[i]);
             }
@@ -449,11 +451,11 @@
                 if (evt.which == 2) {
                 }
                 if (evt.which == 1) {
-										if(typeof evt.offsetX === "undefined" || typeof evt.offsetY === "undefined") {
-										   var targetOffset = $(evt.target).offset();
-										   evt.offsetX = evt.pageX - targetOffset.left;
-										   evt.offsetY = evt.pageY - targetOffset.top;
-										}
+                    if (typeof evt.offsetX === "undefined" || typeof evt.offsetY === "undefined") {
+                        var targetOffset = $(evt.target).offset();
+                        evt.offsetX = evt.pageX - targetOffset.left;
+                        evt.offsetY = evt.pageY - targetOffset.top;
+                    }
                     //var offset = $(this).offset();
                     cl.container.data('down', { x: evt.offsetX, y: evt.offsetY });
                     evt.preventDefault();
@@ -461,12 +463,12 @@
             });
 
             cl.container.mouseup(function (evt) {
-								if(typeof evt.offsetX === "undefined" || typeof evt.offsetY === "undefined") {
-								   var targetOffset = $(evt.target).offset();
-								   evt.offsetX = evt.pageX - targetOffset.left;
-								   evt.offsetY = evt.pageY - targetOffset.top;
-								}
-							
+                if (typeof evt.offsetX === "undefined" || typeof evt.offsetY === "undefined") {
+                    var targetOffset = $(evt.target).offset();
+                    evt.offsetX = evt.pageX - targetOffset.left;
+                    evt.offsetY = evt.pageY - targetOffset.top;
+                }
+
                 if (cl.container[0] != this) return; //No bubbled events
                 if (evt.which == 1) {
                     var down = cl.container.data('down');
@@ -488,13 +490,14 @@
                         accuracy = 5;
                     }
                     addRect(null, { x: cx, y: cy, w: cw, h: ch, accuracy: accuracy });
-
+                    $(document.body).focus();
                 }
             });
 
 
         };
         var hideSelection = function () {
+            $(cl.img).show();
             cl.container.remove();
             cl.enabled = false;
         };
@@ -609,7 +612,7 @@
         var startCarve = function () {
             done.show();
             cancel.show();
-            cl.img.canvasDraw({ C: 1000, controlParent:c });
+            cl.img.canvasDraw({ C: 1000, controlParent: c });
             if (cl.packedData) cl.img.canvasDraw('unpack', cl.packedData);
         };
         var getFixedUrl = function () {
