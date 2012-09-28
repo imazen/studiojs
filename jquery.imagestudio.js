@@ -772,13 +772,18 @@
             q.remove("crop", "cropxunits", "cropyunits");
             var uncroppedUrl = cl.opts.editPath + q.toQueryString(cl.opts.editWithSemicolons);
 
+
+            var onLoadImage = function () {
+                var image = new Image();
+                image.onload = function () { startCrop(image.width, image.height, uncroppedUrl, oldCrop); };
+                image.src = uncroppedUrl;
+                cl.img.unbind('load', onLoadImage);
+            };
+
+            cl.img.bind('load', onLoadImage);
             //Switch to uncropped image
             cl.img.attr('src', uncroppedUrl);
 
-            //Now dynamically load the same url in a dynamically created IMG object, and hope it takes a little longer.
-            var image = new Image();
-            image.onload = function () { startCrop(image.width, image.height, uncroppedUrl, oldCrop); };
-            image.src = uncroppedUrl;
         }).appendTo(c);
 
         var label = h3(opts, 'aspectratio', c).hide();
