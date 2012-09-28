@@ -13,7 +13,7 @@
         height: 530, //To constrain the height of the area.
         panes: ['rotateflip', 'crop', 'adjust', 'redeye', 'carve', 'effects'], //A list of panes to display, in order. 
         editingServer: null, //If set, an alternate server will be used during editing. For example, using a cloud front distribution during editing is counter productive
-        editWithSemicoloms: false, //If true, semicolon notation will be used with the editing server. 
+        editWithSemicolons: false, //If true, semicolon notation will be used with the editing server. 
         finalWithSemicolons: false, //If true, semicolons will be used in the final URLs. Defaults to true if the input URL uses semicolons.
         //A list of commands to temporarily remove from the URL during editing so that position-dependent operations aren't affected.
         //Any commands used by the editor should be in here also, such as 'cache', 'memcache', 'maxwidth',and 'maxheight'
