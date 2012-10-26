@@ -72,6 +72,9 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
                 if (options.jcropRef == null) options.jcropRef = $(options.jcropImg).data('Jcrop');
 
                 var imgSize = options.jcropRef.getWidgetSize();
+                var scale = options.jcropRef.getScaleFactor();
+                imgSize[0] *= scale[0];
+                imgSize[1] *= scale[1];
                 var jopts = options.jcropRef.getOptions;
 
                 //The aspect ratio of the cropping rectangle.
