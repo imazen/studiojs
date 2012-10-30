@@ -11,8 +11,8 @@
         width: null, //To set the width of the area
         accordionWidth: 230,
         height: 530, //To constrain the height of the area.
-        panes: ['rotateflip', 'crop', 'adjust', 'redeye', 'carve', 'effects'], //A list of panes to display, in order. 
-        editingServer: null, //If set, an alternate server will be used during editing. For example, using a cloud front distribution during editing is counter productive
+        panes: ['rotateflip', 'crop', 'adjust', 'redeye', 'carve', 'effects', 'faces'], //A list of panes to display, in order. 
+        editingServer: null, //If set, an alternate server will be used during editing. For example, using cloudfront during editing is counter productive
         editWithSemicolons: false, //If true, semicolon notation will be used with the editing server. 
         finalWithSemicolons: false, //If true, semicolons will be used in the final URLs. Defaults to true if the input URL uses semicolons.
         //A list of commands to temporarily remove from the URL during editing so that position-dependent operations aren't affected.
@@ -24,7 +24,7 @@
         editingCommands: { cache: 'no', scache: 'mem' },
         onchange: null, //The callback to fire whenever an edit occurs.
         cropratios: [[0, "Custom"], ["current", "Current"], [4 / 3, "4:3"], [16 / 9, "16:9 (Widescreen)"], [3 / 2, "3:2"]],
-        cropPreview: { width: '200px', height: '200px', 'margin-left': '-15px' },
+        cropPreview: { width: '175px', height: '175px', 'margin-left': '-15px' },
         icons: {
             rotateleft: 'arrowreturnthick-1-w',
             rotateright: 'arrowreturnthick-1-e',
@@ -67,8 +67,12 @@
             pane_redeye: 'Red-Eye Removal',
             redeye_auto: 'Auto-detect Eyes',
             redeye_start: 'Fix Red-Eye',
-            redeye_preview: 'Preview Result',
+            redeye_preview: 'Toggle Preview',
             redeye_clear: 'Clear',
+            pane_faces: "Face Selection",
+            faces_auto: "Auto-detect Faces",
+            faces_start: "Select Faces",
+            faces_clear: "Clear",
             cancel: 'Cancel',
             done: 'Done',
             pane_carve: 'Object Removal',
@@ -87,7 +91,7 @@
             if (options.labels) defs.labels = $.extend(true, defs.labels, options.labels);
             if (options.icons) defs.icons = $.extend(true, defs.icons, options.icons);
             return $.extend(defs, options);
-        }
+        };
 
         var result = this;
 
@@ -153,7 +157,7 @@
         }; updateOptions();
 
         //Add requested panes
-        var panes = { 'rotateflip': addRotateFlipPane, 'crop': addCropPane, 'adjust': addAdjustPane, 'redeye': addRedEyePane, 'carve': addCarvePane, 'effects': addEffectsPane };
+        var panes = { 'rotateflip': addRotateFlipPane, 'crop': addCropPane, 'adjust': addAdjustPane, 'redeye': addRedEyePane, 'carve': addCarvePane, 'effects': addEffectsPane, 'faces': addFacesPane };
         for (var i = 0; i < opts.panes.length; i++) {
             a.append('<h3><a href="#">' + opts.labels['pane_' + opts.panes[i]] + '</a></h3>');
             a.append(panes[opts.panes[i]](opts));
@@ -183,13 +187,19 @@
             },
             destroy: function () {
                 div.data('ImageStudio', null);
+                div.removeClass("imagestudio");
                 div.empty();
             }
         };
         opts.api = api;
         return api;
     }
-
+    //Because jquery's stupid ctor won't accept element arrays
+    var $a = function (array) {
+        var x = $();
+        $.each(array, function (i, o) { x = x.add(o) });
+        return x;
+    };
 
     //Provides a callback to edit the querystring inside
     var edit = function (opts, callback) {
@@ -337,248 +347,290 @@
         return c;
     };
 
-    var addRedEyePane = function (opts) {
-        var c = $('<div></div>');
-        var closure = {};
-        var cl = closure;
-        cl.img = opts.img;
-        cl.opts = opts;
+    var getCachedJson = function (url, done, fail) {
+        if (window.cachedJson == null) window.cachedJson = {};
+        var result = window.cachedJson[url];
+        if (result != null) {
+            done(result); return;
+        } else {
+            $.ajax({
+                url: url,
+                dataType: 'jsonp',
+                success: function (data) {
+                    window.cachedJson[url] = data;
+                    done(data);
+                },
+                fail: function () {
+                    fail();
+                }
+            });
+        }
+    };
 
-        var getCachedJson = function (url, done, fail) {
-            if (window.cachedJson == null) window.cachedJson = {};
-            var result = window.cachedJson[url];
-            if (result != null) {
-                done(result); return;
-            } else {
-                //todo: add aching
-                $.ajax({
-                    url: closure.jsonUrl,
-                    dataType: 'jsonp',
-                    success: function (data) {
-                        window.cachedJson[url] = data;
-                        done(data);
-                    },
-                    fail: function () {
-                        fail();
-                    }
-                });
-            }
-        };
+    //Used for red-eye and face rectangle overlay management
+    var RectOverlayMgr = function (opts, key, origWidthKey, origHeightKey) { this.opts = opts; this.img = opts.img; this.key = key; this.origWidthKey = origWidthKey; this.origHeightKey = origHeightKey; };
+    var rp = RectOverlayMgr.prototype;
+    rp.hide = function () {
+        $(this.img).show();
+        this.container.remove();
+        this.enabled = false;
+    };
+    rp.addAuto = function () {
+        this.addRects(this.info.features);
+        this.hide();
+        this.show();
+    };
+    rp.clear = function () {
+        this.rects = [];
+        this.hide();
+        this.show();
+    };
+    rp.togglePreview = function () {
+        if (this.enabled) {
+            //Apply or remove 
+            this.img.attr('src', this.getFixedUrl());
+            this.hide();
+        } else {
+            this.img.attr('src', this.baseUrl);
+            this.show();
+        }
+        return this.enabled;
+    };
+    rp.cancel = function () { this.exit(false); };
+    rp.saveAndClose = function () { this.exit(true); };
+    rp.reset = function () {
+        var k = this.key;
+        edit(this.opts, function (obj) {
+            obj.remove(k);
+        });
+    };
+    rp.getFixedUrl = function () {
+        var q = new ImageResizing.ResizeSettings(this.opts.editQuery);
+        q.setRectArray(this.key, this.rects);
+        q[this.origWidthKey] = this.info.ow;
+        q[this.origHeightKey] = this.info.oh;
+        return this.opts.editPath + q.toQueryString(this.opts.editWithSemicolons);
+    };
 
-        var startRedEye = function (data) {
-            closure.info = data;
 
-            auto.show();
-            clear.show();
-            preview.show();
-            cancel.show();
-            done.show();
-            cl.rects = opts.editQuery.getEyeRects();
-            if (cl.rects.length == 0) addRects(data.features);
+
+
+
+    rp.exit = function (save) {
+        this.hide();
+        if (save)
+            setUrl(this.opts, this.getFixedUrl(), false);
+        else
+            this.img.attr('src', this.opts.editUrl);
+        unFreezeImage(this.opts);
+        if (this.onExitComplete) this.onExitComplete(save);
+    };
+
+    rp.beginEnter = function () {
+        var o = this.opts;
+        var q = new ImageResizing.ResizeSettings(o.editQuery);
+        q.remove(this.key);
+        this.baseUrl = o.editPath + q.toQueryString(o.editWithSemicolons);
+        o.img.attr('src', this.baseUrl); //Undo current red-eye fixes
+        this.jsonUrl = this.getJsonUrl(o.editPath, q);
+
+        var cl = this;
+        getCachedJson(this.jsonUrl, function (data) {
+            if (cl.onEnterComplete) cl.onEnterComplete();
+            cl.info = data;
+
+            cl.rects = o.editQuery.getRectArray(cl.key);
+            //Unless we already have rects, default to the automatic ones
+            if (cl.rects.length == 0) cl.addRects(data.features);
 
             freezeImage(cl.opts);
-            showSelection();
-        };
+            cl.show();
+        }, function () {
+            if (cl.onEnterFail) cl.onEnterFail();
+            cl.img.attr('src', o.editUrl);
+        });
+    };
+    rp.hashrect = function (e) { return e.X + e.Y * 1000 + e.X2 * 100000 * e.Y2 * 1000000 };
 
-        var stopRedEye = function (save) {
-            hideSelection();
-            if (save)
-                setUrl(opts, getFixedUrl(), false);
-            else
-                closure.img.attr('src', opts.editUrl);
-            done.hide();
-            cancel.hide();
-            preview.hide();
-            clear.hide();
-            auto.hide();
-            start.show();
-            reset.show();
-            unFreezeImage(cl.opts);
-            opts.accordion.accordion("enable");
-        };
-        var hashrect = function (e) { return e.X + e.Y * 1000 + e.X2 * 100000 * e.Y2 * 1000000 };
-        var addRects = function (rects) {
-            if (rects == null || rects.length == 0) return;
-            //merge with cl.rects, eliminating duplicates
-            cl.rects = _.uniq((cl.rects ? cl.rects : []).concat(_.reject(rects, function (e) { return e.Feature !== 0 })), false, hashrect);
-        };
+    rp.addRects = function (rects) {
+        if (rects == null || rects.length == 0) return;
+        var cl = this;
+        //merge with cl.rects, eliminating duplicates
+        this.rects = _.uniq((this.rects ? this.rects : []).concat(cl.filterRects ? cl.filterRects(rects) : rects), false, cl.hashrect);
+    };
+    rp.addRect = function (rect, clientrect) {
+        var cl = this;
+        var d = cl.info;
+        var cr = clientrect;
+        var r = rect;
+        if (cr == null) {
+            cr = { x: (r.X - d.cropx) * (d.dw / d.cropw) - 1,
+                y: (r.Y - d.cropy) * (d.dh / d.croph) - 1,
+                w: (r.X2 - r.X) * (d.dw / d.cropw),
+                h: (r.Y2 - r.Y) * (d.dh / d.croph)
+            };
+        } 2
+        if (r == null) {
+            var x = cr.x / (d.dw / d.cropw) + d.cropx;
+            var y = cr.y / (d.dh / d.croph) + d.cropy;
+            var w = cr.w / (d.dw / d.cropw);
+            var h = cr.h / (d.dh / d.croph);
+            r = { X: x, Y: y, X2: x + w, Y2: y + h, Accuracy: cr.accuracy };
+            cl.rects.push(r);
+        }
+        //Don't add rectangle if it's out of bounds. silently keep it, in case we change the crop, though.
+        if (cr.x < 0 || cr.y < 0 || cr.x + cr.w > cl.container.width() || cr.y + cr.h > cl.container.height()) return;
+
+        var rect = $('<div></div>').addClass('red-eye-rect').width(cr.w).height(cr.h).css({ 'position': 'absolute', 'z-order': 2000 }).appendTo(cl.container).show().position({ my: 'left top', at: 'left top', collision: 'none', of: cl.container, offset: cr.x.toString() + ' ' + cr.y.toString() });
+        rect.css('border', '1px solid green');
+        rect.data('rect', r);
         var onClickRect = function () {
             var r = $(this).data('rect');
             $(this).remove();
-            cl.rects = _.reject(cl.rects, function (val) { return hashrect(val) == hashrect(r) });
+            cl.rects = _.reject(cl.rects, function (val) { return cl.hashrect(val) == cl.hashrect(r) });
             cl.container.data('down', null);
         };
 
-        var addRect = function (rect, clientrect) {
-            var d = cl.info;
-            var cr = clientrect;
-            var r = rect;
-            if (cr == null) {
-                cr = { x: (r.X - d.cropx) * (d.dw / d.cropw) - 1,
-                    y: (r.Y - d.cropy) * (d.dh / d.croph) - 1,
-                    w: (r.X2 - r.X) * (d.dw / d.cropw),
-                    h: (r.Y2 - r.Y) * (d.dh / d.croph)
-                };
+        rect.mouseup(onClickRect);
+    };
+
+
+    rp.show = function () {
+        var cl = this;
+        var d = cl.info;
+        cl.enabled = true;
+
+        cl.container = $('<div></div>').addClass('red-eye-container').css({ 'position': 'absolute', 'z-order': 1000 }).insertAfter(cl.img).show().position({ my: 'left top', at: 'left top', collision: 'none', of: cl.img, offset: '0 ' + d.dy }).width(d.dw).height(d.dh);
+        $(cl.img).hide();
+        $(cl.container).css({ 'backgroundImage': 'url(' + $(cl.img).attr('src') + ')' });
+        for (var i = 0; i < cl.rects.length; i++) {
+            cl.addRect(cl.rects[i]);
+        }
+        cl.container.mousedown(function (evt) {
+            if (evt.which == 2) {
             }
-            if (r == null) {
-                var x = cr.x / (d.dw / d.cropw) + d.cropx;
-                var y = cr.y / (d.dh / d.croph) + d.cropy;
-                var w = cr.w / (d.dw / d.cropw);
-                var h = cr.h / (d.dh / d.croph);
-                r = { X: x, Y: y, X2: x + w, Y2: y + h, accuracy: cr.accuracy };
-                cl.rects.push(r);
-            }
-            //Don't add rectangle if it's out of bounds. silently keep it, in case we change the crop, though.
-            if (cr.x < 0 || cr.y < 0 || cr.x + cr.w > cl.container.width() || cr.y + cr.h > cl.container.height()) return;
-
-            var rect = $('<div></div>').addClass('red-eye-rect').width(cr.w).height(cr.h).css({ 'position': 'absolute', 'z-order': 2000 }).appendTo(cl.container).show().position({ my: 'left top', at: 'left top', collision: 'none', of: cl.container, offset: cr.x.toString() + ' ' + cr.y.toString() });
-            rect.css('border', '1px solid green');
-            rect.data('rect', r);
-            rect.mouseup(onClickRect);
-
-        };
-        var showSelection = function () {
-            var d = cl.info;
-            cl.enabled = true;
-
-            cl.container = $('<div></div>').addClass('red-eye-container').css({ 'position': 'absolute', 'z-order': 1000 }).insertAfter(cl.img).show().position({ my: 'left top', at: 'left top', collision: 'none', of: cl.img, offset: '0 ' + d.dy }).width(d.dw).height(d.dh);
-            $(cl.img).hide();
-            $(cl.container).css({ 'backgroundImage': 'url(' + $(cl.img).attr('src') + ')' });
-            for (var i = 0; i < cl.rects.length; i++) {
-                addRect(cl.rects[i]);
-            }
-            cl.container.mousedown(function (evt) {
-                if (evt.which == 2) {
-                }
-                if (evt.which == 1) {
-                    if (typeof evt.offsetX === "undefined" || typeof evt.offsetY === "undefined") {
-                        var targetOffset = $(evt.target).offset();
-                        evt.offsetX = evt.pageX - targetOffset.left;
-                        evt.offsetY = evt.pageY - targetOffset.top;
-                    }
-                    //var offset = $(this).offset();
-                    cl.container.data('down', { x: evt.offsetX, y: evt.offsetY });
-                    evt.preventDefault();
-                }
-            });
-
-            cl.container.mouseup(function (evt) {
+            if (evt.which == 1) {
                 if (typeof evt.offsetX === "undefined" || typeof evt.offsetY === "undefined") {
                     var targetOffset = $(evt.target).offset();
                     evt.offsetX = evt.pageX - targetOffset.left;
                     evt.offsetY = evt.pageY - targetOffset.top;
                 }
+                //var offset = $(this).offset();
+                cl.container.data('down', { x: evt.offsetX, y: evt.offsetY });
+                evt.preventDefault();
+            }
+        });
 
-                if (cl.container[0] != this) return; //No bubbled events
-                if (evt.which == 1) {
-                    var down = cl.container.data('down');
-                    if (down == null) return;
-                    cl.container.data('down', null);
-                    var cx = down.x;
-                    var cy = down.y;
-                    var cw = (evt.offsetX - cx);
-                    var ch = (evt.offsetY - cy);
-
-                    var accuracy = 9;
-                    if (cw < 0) { cx += cw; cw *= -1 };
-                    if (ch < 0) { cy += ch; ch *= -1 };
-                    if (cw + ch < 6) {
-                        cx -= 12;
-                        cy -= 12;
-                        cw += 24;
-                        ch += 24;
-                        accuracy = 5;
-                    }
-                    addRect(null, { x: cx, y: cy, w: cw, h: ch, accuracy: accuracy });
-                    $(document.body).focus();
-                }
-            });
-
-
-        };
-        var hideSelection = function () {
-            $(cl.img).show();
-            cl.container.remove();
-            cl.enabled = false;
-        };
-
-
-        var getFixedUrl = function () {
-            var q = new ImageResizing.ResizeSettings(opts.editQuery);
-            q.setEyeRects(cl.rects);
-            q['r.iw'] = cl.info.ow;
-            q['r.ih'] = cl.info.oh;
-            return opts.editPath + q.toQueryString(opts.editWithSemicolons);
-        };
-        //When entering red-eye mode
-        // 0) Hide reset and start button
-        // 1) Download layout and eyes unless already cached for the current image url
-        // 2) If r.eyes is empty, automatically select the eyes
-        // 3) Show 'Clear', 'Auto-detect', "Done', 'Preview' toggle, and 'Cancel buttons.
-        // 4) Automatic rects get a accuracy rating of 0, single clicks 1, and manual rectangles 2.
-        var start = button(opts, 'redeye_start', null, function () {
-            reset.hide();
-            start.hide();
-            lockAccordion(opts, c);
-
-            var o = opts;
-            var q = new ImageResizing.ResizeSettings(o.editQuery);
-            q.remove("r.eyes");
-            closure.baseUrl = o.editPath + q.toQueryString(o.editWithSemicolons);
-            opts.img.attr('src', closure.baseUrl); //Undo current red-eye fixes
-            q['r.detecteyes'] = true;
-            closure.jsonUrl = o.editPath + q.toQueryString(o.editWithSemicolons);
-
-            getCachedJson(closure.jsonUrl, startRedEye, function () {
-                start.show();
-                reset.show();
-                opts.accordion.accordion("enable");
-                closure.img.attr('src', opts.editUrl);
-            });
-
-        }).appendTo(c);
-
-
-        var auto = button(opts, 'redeye_auto', null, function () {
-            addRects(cl.info.features);
-            hideSelection();
-            showSelection();
-        }).appendTo(c).hide();
-
-        var clear = button(opts, 'redeye_clear', null, function () {
-            cl.rects = [];
-            hideSelection();
-            showSelection();
-        }).appendTo(c).hide();
-        $('<br />').appendTo(c);
-
-        var preview = button(opts, 'redeye_preview', null, function () {
-            if (cl.enabled) {
-                //Apply or remove 
-                cl.img.attr('src', getFixedUrl());
-                hideSelection();
-            } else {
-                cl.img.attr('src', closure.baseUrl);
-                showSelection();
+        cl.container.mouseup(function (evt) {
+            if (typeof evt.offsetX === "undefined" || typeof evt.offsetY === "undefined") {
+                var targetOffset = $(evt.target).offset();
+                evt.offsetX = evt.pageX - targetOffset.left;
+                evt.offsetY = evt.pageY - targetOffset.top;
             }
 
-        }).appendTo(c).hide();
+            if (cl.container[0] != this) return; //No bubbled events
+            if (evt.which == 1) {
+                var down = cl.container.data('down');
+                if (down == null) return;
+                cl.container.data('down', null);
+                var cx = down.x;
+                var cy = down.y;
+                var cw = (evt.offsetX - cx);
+                var ch = (evt.offsetY - cy);
 
+                var accuracy = 9;
+                if (cw < 0) { cx += cw; cw *= -1 };
+                if (ch < 0) { cy += ch; ch *= -1 };
+                if (cw + ch < 6) {
+                    cx -= 12;
+                    cy -= 12;
+                    cw += 24;
+                    ch += 24;
+                    accuracy = 5;
+                }
+                cl.addRect(null, { x: cx, y: cy, w: cw, h: ch, accuracy: accuracy });
+                $(document.body).focus();
+            }
+        });
+    };
 
+    var addFacesPane = function (opts) {
+        var c = $('<div></div>');
+        var mgr = new RectOverlayMgr(opts, 'f.rects', 'r.iw', 'r.ih');
+        //Occurs after rect overlay system has exited.
+        mgr.onExitComplete = function () {
+            $a([done, cancel, clear, auto]).hide();
+            $a([start, reset]).show();
+            opts.accordion.accordion("enable");
+        };
+        //Occurs when data has been loaded and system is active
+        mgr.onEnterComplete = function () {
+            $a([done, cancel, clear, auto]).show();
+        };
+        mgr.onEnterFail = function () {
+            $a([start, reset]).show();
+            opts.accordion.accordion("enable");
+        };
+        mgr.getJsonUrl = function (basePath, baseQuery) {
+            baseQuery['f.detect'] = true;
+            return basePath + baseQuery.toQueryString(this.opts.editWithSemicolons);
+        };
 
-        var cancel = button(opts, 'cancel', null, function () {
-            stopRedEye(false);
-        }).appendTo(c).hide();
-
-        var done = button(opts, 'done', null, function () {
-            stopRedEye(true);
-        }).appendTo(c).hide();
-
-        var reset = button(opts, 'reset', function (obj) {
-            obj.remove("r.eyes");
+        var start = button(opts, 'faces_start', null, function () {
+            $a([start, reset]).hide();
+            lockAccordion(opts, c);
+            mgr.beginEnter();
         }).appendTo(c);
 
+        var auto = button(opts, 'faces_auto', null, function () { mgr.addAuto(); }).appendTo(c).hide();
+        var clear = button(opts, 'faces_clear', null, function () { mgr.clear(); }).appendTo(c).hide();
+        $('<br />').appendTo(c);
 
+        var cancel = button(opts, 'cancel', null, function () { mgr.cancel(); }).appendTo(c).hide();
+        var done = button(opts, 'done', null, function () { mgr.saveAndClose(); }).appendTo(c).hide();
+        var reset = button(opts, 'reset', null, function () { mgr.reset(); }).appendTo(c);
+        return c;
+    };
+
+    var addRedEyePane = function (opts) {
+        var c = $('<div></div>');
+        var mgr = new RectOverlayMgr(opts, 'r.eyes', 'r.iw', 'r.ih');
+        //Occurs after rect overlay system has exited.
+        mgr.onExitComplete = function () {
+            $a([done, cancel, preview, clear, auto]).hide();
+            $a([start, reset]).show();
+            opts.accordion.accordion("enable");
+        };
+        //Occurs when data has been loaded and system is active
+        mgr.onEnterComplete = function () {
+            $a([done, cancel, preview, clear, auto]).show();
+        };
+        mgr.onEnterFail = function () {
+            $a([start, reset]).show();
+            opts.accordion.accordion("enable");
+        };
+        mgr.getJsonUrl = function (basePath, baseQuery) {
+            baseQuery['r.detecteyes'] = true;
+            return basePath + baseQuery.toQueryString(this.opts.editWithSemicolons);
+        };
+        mgr.filterRects = function (rects) {
+            return _.reject(rects, function (e) { return e.Feature !== 0 });
+        }
+
+        var start = button(opts, 'redeye_start', null, function () {
+            $a([start, reset]).hide();
+            lockAccordion(opts, c);
+            mgr.beginEnter();
+        }).appendTo(c);
+
+        var auto = button(opts, 'redeye_auto', null, function () { mgr.addAuto(); }).appendTo(c).hide();
+        var clear = button(opts, 'redeye_clear', null, function () { mgr.clear(); }).appendTo(c).hide();
+        $('<br />').appendTo(c);
+
+        var preview = button(opts, 'redeye_preview', null, function () { $a([auto, clear, cancel, done]).toggle(); mgr.togglePreview(); }).appendTo(c).hide();
+        var cancel = button(opts, 'cancel', null, function () { mgr.cancel(); }).appendTo(c).hide();
+        var done = button(opts, 'done', null, function () { mgr.saveAndClose(); }).appendTo(c).hide();
+        var reset = button(opts, 'reset', null, function () { mgr.reset(); }).appendTo(c);
         return c;
     };
 
@@ -657,19 +709,17 @@
     var addCropPane = function (opts) {
         var c = $('<div></div>');
 
-        var closure = {};
+        var cl = {};
+        var closure = cl;
 
-        closure.img = opts.img;
-        closure.cropping = false;
-        closure.jcrop_reference = null;
-        closure.previousUrl = null;
-        closure.opts = opts;
+        cl.img = opts.img;
+        cl.cropping = false;
+        cl.jcrop_reference = null;
+        cl.previousUrl = null;
+        cl.opts = opts;
 
         var startCrop = function (uncroppedWidth, uncroppedHeight, uncroppedUrl, oldCrop) {
             //console.log ("starting to crop " + uncroppedUrl);
-            var cl = closure;
-
-
             //Start jcrop
             //Use existing coords if present
             var coords = null;
@@ -704,10 +754,7 @@
 
 
                 //Show buttons
-                btnCancel.show();
-                btnDone.show();
-                label.show();
-                ratio.show();
+                $a([btnCancel,btnDone,label,ratio]).show();
                 cl.cropping = true;
 
             });
@@ -716,7 +763,6 @@
 
 
         var stopCrop = function (save, norestore) {
-            var cl = closure;
             if (!cl.cropping) return;
             cl.cropping = false;
             if (save) {
@@ -735,21 +781,13 @@
             cl.img.attr('style', ''); //Needed to fix all the junk JCrop added.
             cl.opts.imgDiv.css('padding-left', 0); //undo horizontal align fix
             cl.opts.imgDiv.css('text-align', 'center');
-            btnCancel.hide();
-            btnDone.hide();
-            label.hide();
-            ratio.hide();
-            preview.hide();
-
-            btnCrop.show();
-            btnReset.show();
+            $a([btnCancel,btnDone,label,ratio,preview]).hide();
+            $a([btnCrop,btnReset]).show();
 
             cl.opts.accordion.accordion("enable");
         }
 
         var btnCrop = button(opts, 'crop_crop', null, function () {
-            var cl = closure;
-
             //Hide the reset button - we don't yet support cancelling once we start a crop
             btnReset.hide();
 
@@ -757,10 +795,7 @@
             btnCrop.hide();
 
             //Prevent the accordion from changing, but don't gray out this panel
-            opts.accordion.accordion("disable");
-            c.removeClass("ui-state-disabled");
-            c.removeClass("ui-accordion-disabled");
-            opts.accordion.removeClass("ui-state-disabled");
+            lockAccordion(opts.accordion,c);
 
 
             //Save the original crop values and URL
@@ -779,7 +814,7 @@
                 image.src = uncroppedUrl;
                 cl.img.unbind('load', onLoadImage);
             };
-
+            cl.img.attr('src', "");
             cl.img.bind('load', onLoadImage);
             //Switch to uncropped image
             cl.img.attr('src', uncroppedUrl);
@@ -789,7 +824,6 @@
         var label = h3(opts, 'aspectratio', c).hide();
         var ratio = $("<select></select>");
         var getRatio = function () {
-            var cl = closure;
             return ratio.val() == "current" ? cl.img.width() / cl.img.height() : (ratio.val() == 0 ? null : ratio.val())
         }
         var ratios = opts.cropratios;
@@ -797,7 +831,6 @@
             $('<option value="' + ratios[i][0].toString() + '">' + ratios[i][1] + '</option>').appendTo(ratio);
         ratio.appendTo(c).val(0).hide();
         ratio.change(function () {
-            var cl = closure;
             var r = getRatio();
             var coords = cl.jcrop_reference.tellSelect();
             cl.jcrop_reference.setOptions({ aspectRatio: r });
