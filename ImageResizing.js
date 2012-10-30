@@ -1,7 +1,9 @@
-﻿var ImageResizing = {};
-var ir = ImageResizing;
+﻿
+var ImageResizer = {};
+var ir = ImageResizer;
 
-ir.ResizeSettings = function (url) {
+ir.Instructions = function (url) {
+    if (url == null) return;
     var isString = (typeof url == 'string' || url instanceof String);
     if (!isString) {
         //If it's an object, shallow clone it.
@@ -19,7 +21,10 @@ ir.ResizeSettings = function (url) {
     //normalize
     this.normalize();
 };
-var rs = ImageResizing.ResizeSettings;
+var rs = ImageResizer.Instructions;
+//Add legacy alias ImageResizing.ResizeSettings
+var ImageResizing = ir; 
+ir.ResizeSettings = ir.Instructions;
 
 rs.prototype.mergeWith = function (addition, overwrite) {
     for (var i in addition) if (i && addition.hasOwnProperty(i) && addition[i] !== undefined && addition[i] !== null) {
@@ -80,24 +85,33 @@ rs.prototype.undup = function(primary, secondary){
 };
 
 
-rs.prototype.toggle = function (key, defaultValue, deleteIf) {
+rs.prototype.toggle = function (key, defaultValue, deleteIfMatches) {
+    //Cascade defaultValue 
+    if (defaultValue !== undefined && deleteIfMatches === undefined)
+        deleteIfMatches = defaultValue;
+
     //Special handling for flip.x, flip.y, srcFlip.x, srcFlip.y, sFlip.x, sFlip.y
     if ((/flip\.[xy]$/i).test(key)) {
+        if (deleteIfMatches === undefined) deleteIfMatches= "00";
         var lastchar = key.charAt(key.length - 1);
         key = key.substring(0, key.length - 2);
         if (key.charAt(0) == 's') this.rotateFlipCoords(0, lastchar == 'x', lastchar == 'y'); //Must call before changing flip value. Have to undo x flip, then reapply x or y flip.
         var val = ir.Utils.toggleFlip(this[key], lastchar == 'x', lastchar == 'y'); 
-        if (val == "00") delete this[key];
+        if (val === deleteIfMatches) delete this[key];
         else this[key] = val;
-        return;
+        return val;
     }
-    var val = ir.Utils.toBool(this[key]);
+    if (deleteIfMatches === undefined) deleteIfMatches=false;
+    defaultValue == (defaultValue == true);
+    var val = ir.Utils.toBool(this[key],defaultValue);
     val = !val;
-    if (val == deleteIf) delete this[key];
+    if (val === deleteIfMatches) delete this[key];
     else this[key] = val;
+    return val;
 };
 
 rs.prototype.increment = function (key, offset, cycleLimit, defaultValue) {
+    cycleLimit = cycleLimit ? cycleLimit : 360;
     defaultValue = defaultValue ? defaultValue : 0;
     var val = (this[key] === undefined | this[key] === null) ? defaultValue : parseFloat(this[key]);
     val = (val + offset) % cycleLimit;
@@ -116,10 +130,11 @@ rs.prototype.getCrop = function () {
 
 rs.prototype.setCrop = function (cropObj) {
     new ir.CropRectangle(cropObj).pushTo(this);
+    return this;
 };
 
-rs.prototype.getEyeRects = function () {
-    var str = this['r.eyes'];
+rs.prototype.getRectArray = function (key) {
+    var str = this[key];
     if (str == null || str.length == 0) return [];
     var parts = str.split(',');
     var rects = [];
@@ -129,19 +144,20 @@ rs.prototype.getEyeRects = function () {
         var w = parseFloat(parts[i * 5 + 2]);
         var h = parseFloat(parts[i * 5 + 3]);
         var a = parseFloat(parts[i * 5 + 4]);
-        rects.push({ X: x, Y: y, X2: x + w, Y2: y + h, accuracy: a });
+        rects.push({ X: x, Y: y, X2: x + w, Y2: y + h, Accuracy: a });
     }
-    return rects; 
+    return rects;
 };
-rs.prototype.setEyeRects = function (rects) {
+rs.prototype.setRectArray = function (key, rects) {
     var str = "";
     for (var i = 0; i < rects.length; i++) {
         var r = rects[i];
         str += Math.round(r.X).toString() + "," + Math.round(r.Y).toString() +
-                 "," + Math.round(r.X2 - r.X).toString() + "," + Math.round(r.Y2 - r.Y).toString() + "," + r.accuracy.toString() + ",";
+                 "," + Math.round(r.X2 - r.X).toString() + "," + Math.round(r.Y2 - r.Y).toString() + "," + r.Accuracy.toString() + ",";
     }
-    this['r.eyes'] = str.length > 0 ? str.substr(0, str.length - 1) : null;
-    if (this['r.eyes'] == null) delete this['r.eyes'];
+    this[key] = str.length > 0 ? str.substr(0, str.length - 1) : null;
+    if (this[key] == null) delete this[key];
+    return this;
 };
 
 rs.prototype.resetSourceRotateFlip = function () {
@@ -156,24 +172,30 @@ rs.prototype.rotateFlipCoords = function (rot, fx, fy) {
     var oldAngle = parseFloat(this.srotate ? this.srotate : "0");
 
 
-    //Rotate eyes.
-    if (this['r.eyes'] && this['r.iw'] && this['r.ih']) {
-        var h = parseInt(this['r.ih']);
-        var w = parseInt(this['r.iw']);
+    //Rotate rect arrays (eyes and faces)
+    var sets = [['r.eyes', 'r.iw', 'r.ih'],
+                ['f.rects', 'r.iw', 'r.ih']];
 
-        var rects = this.getEyeRects();
-        for (var i = 0; i < rects.length; i++) {
-            var r = rects[i];
-            var newr = ir.Utils.flipRotateRect(r.X, r.Y, r.X2, r.Y2, w, h, oldAngle, oldAngle + rot, oldFlip.x, oldFlip.x ^ fx, oldFlip.y, oldFlip.y ^ fy);
+    for (var i = 0; i < sets.length; i++) {
+        var set = sets[i];
+        if (this[set[0]] && this[set[1]] && this[set[2]]) {
+            var h = parseInt(this[set[2]]);
+            var w = parseInt(this[set[1]]);
 
-            rects[i] = { X: newr.x1, Y: newr.y1, X2: newr.x2, Y2: newr.y2, accuracy: r.accuracy };
+            var rects = this.getRectArray(set[0]);
+            for (var i = 0; i < rects.length; i++) {
+                var r = rects[i];
+                var newr = ir.Utils.flipRotateRect(r.X, r.Y, r.X2, r.Y2, w, h, oldAngle, oldAngle + rot, oldFlip.x, oldFlip.x ^ fx, oldFlip.y, oldFlip.y ^ fy);
 
-            this['r.ih'] = newr.yunits;
-            this['r.iw'] = newr.xunits;
+                rects[i] = { X: newr.x1, Y: newr.y1, X2: newr.x2, Y2: newr.y2, Accuracy: r.Accuracy };
+
+                this[set[2]] = newr.yunits;
+                this[set[1]] = newr.xunits;
+            }
+            this.setRectArray(set[0], rects);
         }
-        this.setEyeRects(rects);
-
     }
+    
 
     var c = this.getCrop();
     //Only rotate if all items are present.
@@ -181,6 +203,7 @@ rs.prototype.rotateFlipCoords = function (rot, fx, fy) {
 
     var r = ir.Utils.flipRotateRect(c.x1, c.y1, c.x2, c.y2, c.xunits, c.yunits, oldAngle, oldAngle + rot, oldFlip.x, oldFlip.x ^ fx, oldFlip.y, oldFlip.y ^ fy);
     this.setCrop(r);
+    return this;
 };
 
 
@@ -269,6 +292,7 @@ ir.Utils.toggleFlip = function (originalValue, togglex, toggley) {
 
 ir.Utils.toBool = function (val, defaultValue) {
     if (val === null || val === undefined) return (defaultValue == true);
+    val = val.toLowerCase();
     if (val == "false") return false;
     if (val == "0") return false;
     if (val == "no") return false;
