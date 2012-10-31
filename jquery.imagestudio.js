@@ -81,6 +81,10 @@
 
         }
     };
+    /* Coding style notes:
+    Within each pane, a closure object name 'cl' is used to track state within the pane.
+    Each pane function is passed a reference to the instance-wide options object, which can be used to modify the image URL, lock/unlock the accordion, etc.
+    */
 
     $.fn.ImageStudio = function (options) {
 
@@ -309,7 +313,7 @@
 
         return c;
     };
-
+    //contrast/saturation/brightness adjustment
     var addAdjustPane = function (opts) {
         var c = $('<div></div>');
         toggle(c, 'autofix', "a.equalize", opts);
@@ -324,7 +328,7 @@
         }).appendTo(c);
         return c;
     };
-
+    //Effects and noise removal
     var addEffectsPane = function (opts) {
         var c = $('<div></div>');
         toggle(c, 'blackwhite', "s.grayscale", opts);
@@ -343,6 +347,238 @@
         button(opts, 'reset', function (obj) {
             obj.remove("a.sharpen", "a.removenoise", "a.oilpainting", "a.posterize", "s.grayscale", "s.sepia", "s.invert", "a.blur", "a.radiusunits");
         }).appendTo(c);
+        return c;
+    };
+
+
+
+    //Object-remvoal (seam carving) pane
+    var addCarvePane = function (opts) {
+        var c = $('<div></div>');
+
+        var cl = {};
+        cl.img = opts.img;
+        cl.opts = opts;
+
+        var start = button(opts, 'carve_start', null, function () {
+            reset.hide(); start.hide();
+            lockAccordion(opts, c);
+            var o = opts;
+            var q = new ImageResizing.ResizeSettings(o.editQuery);
+            cl.packedData = o.editQuery["carve.data"];
+            q.remove("carve.data");
+            cl.baseUrl = o.editPath + q.toQueryString(o.editWithSemicolons);
+            opts.img.attr('src', cl.baseUrl); //Undo current seam carving
+            freezeImage(opts);
+            var image = new Image();
+            image.onload = function () {
+                cl.w = image.width;
+                cl.h = image.height;
+                startCarve();
+            };
+            image.src = cl.baseUrl;
+
+        }).appendTo(c);
+
+        var startCarve = function () {
+            done.show();
+            cancel.show();
+            cl.img.canvasDraw({ C: 1000, controlParent: c });
+            if (cl.packedData) cl.img.canvasDraw('unpack', cl.packedData);
+        };
+        var getFixedUrl = function () {
+            var o = cl.opts;
+            var q = new ImageResizing.ResizeSettings(o.editQuery);
+            q["carve.data"] = cl.packedData;
+            return o.editPath + q.toQueryString(o.editWithSemicolons);
+        }
+        //Used for cancel and done buttons.
+        var stopDrawing = function (save) {
+            cl.packedData = cl.img.canvasDraw('pack');
+            cl.img.canvasDraw('unload');
+            if (save)
+                setUrl(opts, getFixedUrl(), false);
+            else
+                cl.img.attr('src', opts.editUrl);
+            done.hide();
+            cancel.hide();
+            start.show();
+            reset.show();
+
+            unFreezeImage(opts);
+            opts.accordion.accordion("enable");
+        };
+
+        var cancel = button(opts, 'cancel', null, function () { stopDrawing(false); }).appendTo(c).hide();
+        var done = button(opts, 'done', null, function () { stopDrawing(true); }).appendTo(c).hide();
+        //Just remove carve.data to reset everything!
+        var reset = button(opts, 'reset', function (obj) { obj.remove("carve.data"); }).appendTo(c);
+        return c;
+    };
+    //Adds a pane for cropping
+    var addCropPane = function (opts) {
+        var c = $('<div></div>');
+
+        var cl = {};
+        var closure = cl;
+
+        cl.img = opts.img;
+        cl.cropping = false;
+        cl.jcrop_reference = null;
+        cl.previousUrl = null;
+        cl.opts = opts;
+
+        var startCrop = function (uncroppedWidth, uncroppedHeight, uncroppedUrl, oldCrop) {
+            //console.log ("starting to crop " + uncroppedUrl);
+            //Start jcrop
+            //Use existing coords if present
+            var coords = null;
+            var cropObj = oldCrop;
+            if (cropObj && cropObj.allPresent()) {
+                coords = cropObj.stretchTo(uncroppedWidth, uncroppedHeight).toCoordsArray();
+            }
+
+            if (cl.opts.cropPreview) preview.JcropPreview({ jcropImg: cl.img });
+            preview.hide();
+
+            var update = function (coords) {
+                if (cl.opts.cropPreview) preview.JcropPreviewUpdate(coords);
+                if (cl.opts.cropPreview) preview.show();
+            };
+
+            cl.opts.imgDiv.css('padding-left', (cl.opts.imgDiv.width() - cl.img.width()) / 2 + 1);
+            cl.opts.imgDiv.css('text-align', 'left');
+            //Start up jCrop
+            cl.img.Jcrop({
+                onChange: update,
+                onSelect: update,
+                aspectRatio: getRatio(),
+                bgColor: 'black',
+                bgOpacity: 0.6
+            }, function () {
+                cl.jcrop_reference = this;
+                cl.opts.jcrop_reference = this;
+
+                if (cl.opts.cropPreview) preview.JcropPreviewUpdate({ x: 0, y: 0, x2: uncroppedWidth, y2: uncroppedHeight, width: uncroppedWidth, height: uncroppedHeight });
+                if (coords != null) this.setSelect(coords);
+
+
+                //Show buttons
+                $a([btnCancel, btnDone, label, ratio]).show();
+                cl.cropping = true;
+
+            });
+
+        }
+
+
+        var stopCrop = function (save, norestore) {
+            if (!cl.cropping) return;
+            cl.cropping = false;
+            if (save) {
+                setUrl(cl.opts, cl.previousUrl, true);
+                var coords = cl.jcrop_reference.tellSelect();
+                edit(cl.opts, function (obj) {
+                    obj.setCrop({ x1: coords.x, y1: coords.y, x2: coords.x2, y2: coords.y2, xunits: cl.img.width(), yunits: cl.img.height() });
+                });
+            } else if (!norestore) {
+                setUrl(cl.opts, cl.previousUrl);
+            }
+            if (cl.jcrop_reference) {
+                cl.jcrop_reference.destroy();
+                delete cl.opts.jcrop_reference;
+            }
+            cl.img.attr('style', ''); //Needed to fix all the junk JCrop added.
+            cl.opts.imgDiv.css('padding-left', 0); //undo horizontal align fix
+            cl.opts.imgDiv.css('text-align', 'center');
+            $a([btnCancel, btnDone, label, ratio, preview]).hide();
+            $a([btnCrop, btnReset]).show();
+
+            cl.opts.accordion.accordion("enable");
+        }
+
+        var btnCrop = button(opts, 'crop_crop', null, function () {
+            //Hide the reset button - we don't yet support cancelling once we start a crop
+            btnReset.hide();
+
+            //Hide the crop button
+            btnCrop.hide();
+
+            //Prevent the accordion from changing, but don't gray out this panel
+            lockAccordion(opts.accordion, c);
+
+
+            //Save the original crop values and URL
+            var oldCrop = cl.opts.editQuery.getCrop();
+            cl.previousUrl = opts.editUrl;
+
+            //Create an uncropped URL
+            var q = new ImageResizing.ResizeSettings(cl.opts.editQuery);
+            q.remove("crop", "cropxunits", "cropyunits");
+            var uncroppedUrl = cl.opts.editPath + q.toQueryString(cl.opts.editWithSemicolons);
+
+
+            var onLoadImage = function () {
+                var image = new Image();
+                image.onload = function () { startCrop(image.width, image.height, uncroppedUrl, oldCrop); };
+                image.src = uncroppedUrl;
+                cl.img.unbind('load', onLoadImage);
+            };
+            cl.img.attr('src', "");
+            cl.img.bind('load', onLoadImage);
+            //Switch to uncropped image
+            cl.img.attr('src', uncroppedUrl);
+
+        }).appendTo(c);
+
+        var label = h3(opts, 'aspectratio', c).hide();
+        var ratio = $("<select></select>");
+        var getRatio = function () {
+            return ratio.val() == "current" ? cl.img.width() / cl.img.height() : (ratio.val() == 0 ? null : ratio.val())
+        }
+        var ratios = opts.cropratios;
+        for (var i = 0; i < ratios.length; i++)
+            $('<option value="' + ratios[i][0].toString() + '">' + ratios[i][1] + '</option>').appendTo(ratio);
+        ratio.appendTo(c).val(0).hide();
+        ratio.change(function () {
+            var r = getRatio();
+            var coords = cl.jcrop_reference.tellSelect();
+            cl.jcrop_reference.setOptions({ aspectRatio: r });
+            var areAllEmpty = function (obj, keys) {
+                for (var k in keys)
+                    if (!isNaN(obj[keys[k]]) && obj[keys[k]] != 0) return false;
+                return true;
+            };
+            if (areAllEmpty(coords, ['x', 'y', 'x2', 'y2'])) {
+                if (r != 0 && r != cl.img.width() / cl.img.height()) {
+                    cl.jcrop_reference.setSelect(ImageResizing.Utils.getRectOfRatio(r, cl.img.width(), cl.img.height()));
+                } else cl.jcrop_reference.release();
+            }
+            cl.jcrop_reference.focus();
+        });
+        var grouper = $('<div></div>').addClass('crop-active-buttons').appendTo(c);
+        var btnCancel = button(opts, 'crop_cancel', null, function () {
+            stopCrop(false);
+        }).appendTo(grouper).hide();
+        var btnDone = button(opts, 'crop_done', null, function () {
+            stopCrop(true);
+        }).appendTo(grouper).hide();
+        var preview = $("<div></div>").addClass('cropPreview').appendTo(c).hide();
+        if (opts.cropPreview) preview.css(opts.cropPreview);
+        var btnReset = button(opts, 'reset', function (obj) {
+            stopCrop(false, true);
+            obj.remove("crop", "cropxunits", "cropyunits");
+        }).appendTo(c);
+
+
+
+        //Update button label and 'undo' visib
+        btnCrop.button("option", "label", opts.editQuery.crop ? opts.labels.crop_modify : opts.labels.crop_crop);
+        btnReset.button({ disabled: !opts.editQuery.crop });
+        closure.img.bind('query', function (e, obj) {
+            btnCrop.button("option", "label", obj["crop"] ? opts.labels.crop_modify : opts.labels.crop_crop);
+            btnReset.button({ disabled: !obj["crop"] });
+        });
 
         return c;
     };
@@ -634,243 +870,5 @@
         return c;
     };
 
-    var addCarvePane = function (opts) {
-        var c = $('<div></div>');
-
-        var cl = {};
-        cl.img = opts.img;
-        cl.opts = opts;
-
-        var start = button(opts, 'carve_start', null, function () {
-            reset.hide(); start.hide();
-            lockAccordion(opts, c);
-            var o = opts;
-            var q = new ImageResizing.ResizeSettings(o.editQuery);
-            cl.packedData = o.editQuery["carve.data"];
-            q.remove("carve.data");
-            cl.baseUrl = o.editPath + q.toQueryString(o.editWithSemicolons);
-            opts.img.attr('src', cl.baseUrl); //Undo current seam carving
-            freezeImage(opts);
-            var image = new Image();
-            image.onload = function () {
-                cl.w = image.width;
-                cl.h = image.height;
-                startCarve();
-            };
-            image.src = cl.baseUrl;
-
-        }).appendTo(c);
-
-        var startCarve = function () {
-            done.show();
-            cancel.show();
-            cl.img.canvasDraw({ C: 1000, controlParent: c });
-            if (cl.packedData) cl.img.canvasDraw('unpack', cl.packedData);
-        };
-        var getFixedUrl = function () {
-            var o = cl.opts;
-            var q = new ImageResizing.ResizeSettings(o.editQuery);
-            q["carve.data"] = cl.packedData;
-            return o.editPath + q.toQueryString(o.editWithSemicolons);
-        }
-        var stopDrawing = function (save) {
-            cl.packedData = cl.img.canvasDraw('pack');
-            cl.img.canvasDraw('unload');
-            if (save)
-                setUrl(opts, getFixedUrl(), false);
-            else
-                cl.img.attr('src', opts.editUrl);
-            done.hide();
-            cancel.hide();
-            start.show();
-            reset.show();
-
-            unFreezeImage(opts);
-            opts.accordion.accordion("enable");
-        };
-
-
-
-        var cancel = button(opts, 'cancel', null, function () {
-            stopDrawing(false);
-        }).appendTo(c).hide();
-
-        var done = button(opts, 'done', null, function () {
-            stopDrawing(true);
-        }).appendTo(c).hide();
-
-        var reset = button(opts, 'reset', function (obj) {
-            obj.remove("carve.data");
-        }).appendTo(c);
-
-        return c;
-    };
-    //Adds a pane for cropping
-    var addCropPane = function (opts) {
-        var c = $('<div></div>');
-
-        var cl = {};
-        var closure = cl;
-
-        cl.img = opts.img;
-        cl.cropping = false;
-        cl.jcrop_reference = null;
-        cl.previousUrl = null;
-        cl.opts = opts;
-
-        var startCrop = function (uncroppedWidth, uncroppedHeight, uncroppedUrl, oldCrop) {
-            //console.log ("starting to crop " + uncroppedUrl);
-            //Start jcrop
-            //Use existing coords if present
-            var coords = null;
-            var cropObj = oldCrop;
-            if (cropObj && cropObj.allPresent()) {
-                coords = cropObj.stretchTo(uncroppedWidth, uncroppedHeight).toCoordsArray();
-            }
-
-            if (cl.opts.cropPreview) preview.JcropPreview({ jcropImg: cl.img });
-            preview.hide();
-
-            var update = function (coords) {
-                if (cl.opts.cropPreview) preview.JcropPreviewUpdate(coords);
-                if (cl.opts.cropPreview) preview.show();
-            };
-
-            cl.opts.imgDiv.css('padding-left', (cl.opts.imgDiv.width() - cl.img.width()) / 2 + 1);
-            cl.opts.imgDiv.css('text-align', 'left');
-            //Start up jCrop
-            cl.img.Jcrop({
-                onChange: update,
-                onSelect: update,
-                aspectRatio: getRatio(),
-                bgColor: 'black',
-                bgOpacity: 0.6
-            }, function () {
-                cl.jcrop_reference = this;
-                cl.opts.jcrop_reference = this;
-
-                if (cl.opts.cropPreview) preview.JcropPreviewUpdate({ x: 0, y: 0, x2: uncroppedWidth, y2: uncroppedHeight, width: uncroppedWidth, height: uncroppedHeight });
-                if (coords != null) this.setSelect(coords);
-
-
-                //Show buttons
-                $a([btnCancel,btnDone,label,ratio]).show();
-                cl.cropping = true;
-
-            });
-
-        }
-
-
-        var stopCrop = function (save, norestore) {
-            if (!cl.cropping) return;
-            cl.cropping = false;
-            if (save) {
-                setUrl(cl.opts, cl.previousUrl, true);
-                var coords = cl.jcrop_reference.tellSelect();
-                edit(cl.opts, function (obj) {
-                    obj.setCrop({ x1: coords.x, y1: coords.y, x2: coords.x2, y2: coords.y2, xunits: cl.img.width(), yunits: cl.img.height() });
-                });
-            } else if (!norestore) {
-                setUrl(cl.opts, cl.previousUrl);
-            }
-            if (cl.jcrop_reference) {
-                cl.jcrop_reference.destroy();
-                delete cl.opts.jcrop_reference;
-            }
-            cl.img.attr('style', ''); //Needed to fix all the junk JCrop added.
-            cl.opts.imgDiv.css('padding-left', 0); //undo horizontal align fix
-            cl.opts.imgDiv.css('text-align', 'center');
-            $a([btnCancel,btnDone,label,ratio,preview]).hide();
-            $a([btnCrop,btnReset]).show();
-
-            cl.opts.accordion.accordion("enable");
-        }
-
-        var btnCrop = button(opts, 'crop_crop', null, function () {
-            //Hide the reset button - we don't yet support cancelling once we start a crop
-            btnReset.hide();
-
-            //Hide the crop button
-            btnCrop.hide();
-
-            //Prevent the accordion from changing, but don't gray out this panel
-            lockAccordion(opts.accordion,c);
-
-
-            //Save the original crop values and URL
-            var oldCrop = cl.opts.editQuery.getCrop();
-            cl.previousUrl = opts.editUrl;
-
-            //Create an uncropped URL
-            var q = new ImageResizing.ResizeSettings(cl.opts.editQuery);
-            q.remove("crop", "cropxunits", "cropyunits");
-            var uncroppedUrl = cl.opts.editPath + q.toQueryString(cl.opts.editWithSemicolons);
-
-
-            var onLoadImage = function () {
-                var image = new Image();
-                image.onload = function () { startCrop(image.width, image.height, uncroppedUrl, oldCrop); };
-                image.src = uncroppedUrl;
-                cl.img.unbind('load', onLoadImage);
-            };
-            cl.img.attr('src', "");
-            cl.img.bind('load', onLoadImage);
-            //Switch to uncropped image
-            cl.img.attr('src', uncroppedUrl);
-
-        }).appendTo(c);
-
-        var label = h3(opts, 'aspectratio', c).hide();
-        var ratio = $("<select></select>");
-        var getRatio = function () {
-            return ratio.val() == "current" ? cl.img.width() / cl.img.height() : (ratio.val() == 0 ? null : ratio.val())
-        }
-        var ratios = opts.cropratios;
-        for (var i = 0; i < ratios.length; i++)
-            $('<option value="' + ratios[i][0].toString() + '">' + ratios[i][1] + '</option>').appendTo(ratio);
-        ratio.appendTo(c).val(0).hide();
-        ratio.change(function () {
-            var r = getRatio();
-            var coords = cl.jcrop_reference.tellSelect();
-            cl.jcrop_reference.setOptions({ aspectRatio: r });
-            var areAllEmpty = function (obj, keys) {
-                for (var k in keys)
-                    if (!isNaN(obj[keys[k]]) && obj[keys[k]] != 0) return false;
-                return true;
-            };
-            if (areAllEmpty(coords, ['x', 'y', 'x2', 'y2'])) {
-                if (r != 0 && r != cl.img.width() / cl.img.height()) {
-                    cl.jcrop_reference.setSelect(ImageResizing.Utils.getRectOfRatio(r, cl.img.width(), cl.img.height()));
-                } else cl.jcrop_reference.release();
-            }
-            cl.jcrop_reference.focus();
-        });
-        var grouper = $('<div></div>').addClass('crop-active-buttons').appendTo(c);
-        var btnCancel = button(opts, 'crop_cancel', null, function () {
-            stopCrop(false);
-        }).appendTo(grouper).hide();
-        var btnDone = button(opts, 'crop_done', null, function () {
-            stopCrop(true);
-        }).appendTo(grouper).hide();
-        var preview = $("<div></div>").addClass('cropPreview').appendTo(c).hide();
-        if (opts.cropPreview) preview.css(opts.cropPreview);
-        var btnReset = button(opts, 'reset', function (obj) {
-            stopCrop(false, true);
-            obj.remove("crop", "cropxunits", "cropyunits");
-        }).appendTo(c);
-
-
-
-        //Update button label and 'undo' visib
-        btnCrop.button("option", "label", opts.editQuery.crop ? opts.labels.crop_modify : opts.labels.crop_crop);
-        btnReset.button({ disabled: !opts.editQuery.crop });
-        closure.img.bind('query', function (e, obj) {
-            btnCrop.button("option", "label", obj["crop"] ? opts.labels.crop_modify : opts.labels.crop_crop);
-            btnReset.button({ disabled: !obj["crop"] });
-        });
-
-        return c;
-    };
 
 })(jQuery);  
