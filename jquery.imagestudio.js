@@ -418,32 +418,31 @@
     //Adds a pane for cropping
     var addCropPane = function (opts) {
         var c = $('<div></div>');
+        //Pane-local closure
+        var cl = { img: opts.img,
+            cropping: false,
+            jcrop_reference: null,
+            previousUrl: null,
+            opts: opts
+        };
 
-        var cl = {};
-        var closure = cl;
-
-        cl.img = opts.img;
-        cl.cropping = false;
-        cl.jcrop_reference = null;
-        cl.previousUrl = null;
-        cl.opts = opts;
-
+        //Called once the 'uncropped' image has been loaded and its dimensions determined
         var startCrop = function (uncroppedWidth, uncroppedHeight, uncroppedUrl, oldCrop) {
-            //console.log ("starting to crop " + uncroppedUrl);
-            //Start jcrop
             //Use existing coords if present
             var coords = null;
             var cropObj = oldCrop;
-            if (cropObj && cropObj.allPresent()) {
-                coords = cropObj.stretchTo(uncroppedWidth, uncroppedHeight).toCoordsArray();
-            }
+            //Adjust for xunits/yunits
+            if (cropObj && cropObj.allPresent()) coords = cropObj.stretchTo(uncroppedWidth, uncroppedHeight).toCoordsArray();
 
+
+            //Handle preview init/update
             if (cl.opts.cropPreview) preview.JcropPreview({ jcropImg: cl.img });
             preview.hide();
-
             var update = function (coords) {
-                if (cl.opts.cropPreview) preview.JcropPreviewUpdate(coords);
-                if (cl.opts.cropPreview) preview.show();
+                if (cl.opts.cropPreview) {
+                    preview.JcropPreviewUpdate(coords);
+                    preview.show();
+                }
             };
 
             cl.opts.imgDiv.css('padding-left', (cl.opts.imgDiv.width() - cl.img.width()) / 2 + 1);
@@ -456,17 +455,16 @@
                 bgColor: 'black',
                 bgOpacity: 0.6
             }, function () {
+                //Called when jCrop finishes loading
                 cl.jcrop_reference = this;
                 cl.opts.jcrop_reference = this;
 
                 if (cl.opts.cropPreview) preview.JcropPreviewUpdate({ x: 0, y: 0, x2: uncroppedWidth, y2: uncroppedHeight, width: uncroppedWidth, height: uncroppedHeight });
                 if (coords != null) this.setSelect(coords);
 
-
                 //Show buttons
                 $a([btnCancel, btnDone, label, ratio]).show();
                 cl.cropping = true;
-
             });
 
         }
@@ -493,18 +491,12 @@
             cl.opts.imgDiv.css('text-align', 'center');
             $a([btnCancel, btnDone, label, ratio, preview]).hide();
             $a([btnCrop, btnReset]).show();
-
             cl.opts.accordion.accordion("enable");
         }
 
         var btnCrop = button(opts, 'crop_crop', null, function () {
-            //Hide the reset button - we don't yet support cancelling once we start a crop
-            btnReset.hide();
-
-            //Hide the crop button
-            btnCrop.hide();
-
-            //Prevent the accordion from changing, but don't gray out this panel
+            //Hide the reset and crop button, lock the accordion
+            $a([btnReset, btnCrop]).hide();
             lockAccordion(opts.accordion, c);
 
 
@@ -530,12 +522,12 @@
             cl.img.attr('src', uncroppedUrl);
 
         }).appendTo(c);
-
+        //Set up aspect ratio checkbox
         var label = h3(opts, 'aspectratio', c).hide();
         var ratio = $("<select></select>");
         var getRatio = function () {
             return ratio.val() == "current" ? cl.img.width() / cl.img.height() : (ratio.val() == 0 ? null : ratio.val())
-        }
+        };
         var ratios = opts.cropratios;
         for (var i = 0; i < ratios.length; i++)
             $('<option value="' + ratios[i][0].toString() + '">' + ratios[i][1] + '</option>').appendTo(ratio);
@@ -571,11 +563,10 @@
         }).appendTo(c);
 
 
-
         //Update button label and 'undo' visib
         btnCrop.button("option", "label", opts.editQuery.crop ? opts.labels.crop_modify : opts.labels.crop_crop);
         btnReset.button({ disabled: !opts.editQuery.crop });
-        closure.img.bind('query', function (e, obj) {
+        cl.img.bind('query', function (e, obj) {
             btnCrop.button("option", "label", obj["crop"] ? opts.labels.crop_modify : opts.labels.crop_crop);
             btnReset.button({ disabled: !obj["crop"] });
         });
