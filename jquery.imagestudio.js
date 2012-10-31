@@ -10,8 +10,8 @@
         url: null, //The image URL to load for editing. 
         width: null, //To set the width of the area
         accordionWidth: 230,
-        height: 530, //To constrain the height of the area.
-        panes: ['rotateflip', 'crop', 'adjust', 'redeye', 'carve', 'effects', 'faces'], //A list of panes to display, in order. 
+        height: 560, //To constrain the height of the area.
+        panes: ['rotateflip', 'crop', 'adjust', 'effects', 'redeye', 'carve', 'faces'], //A list of panes to display, in order. 
         editingServer: null, //If set, an alternate server will be used during editing. For example, using cloudfront during editing is counter productive
         editWithSemicolons: false, //If true, semicolon notation will be used with the editing server. 
         finalWithSemicolons: false, //If true, semicolons will be used in the final URLs. Defaults to true if the input URL uses semicolons.
@@ -130,10 +130,12 @@
         var a = $("<div></div>").addClass("controls").width(opts.accordionWidth).appendTo(atd);
 
         //Add image
-        var idiv = $('<div></div>').css('text-align', 'center').appendTo($('<td></td>').addClass("imageCell").css('vertical-align', 'middle').css('text-align', 'center').css('padding-left', '10px').css('padding-right', '10px').appendTo(tr));
+        var itd = $('<td></td>').addClass("imageCell").css('vertical-align', 'middle').css('text-align', 'center').css('padding-left', '10px').css('padding-right', '10px').appendTo(tr);
+        var idiv = $('<div></div>').css('text-align', 'center').appendTo(itd);
         var img = $('<img />').addClass("studioimage").appendTo(idiv);
         opts.img = img; //Save a reference to the image object in options
         opts.imgDiv = idiv;
+        opts.container = div;
         opts.accordion = a;
         var updateOptions = function () {
             if (opts.width) { div.width(opts.width); }
@@ -210,6 +212,7 @@
         opts.editQuery = new ImageResizing.ResizeSettings(opts.editQuery);
         callback(opts.editQuery);
         opts.editUrl = opts.editPath + opts.editQuery.toQueryString(opts.editWithSemicolons);
+        setloading(opts, true, true);
         opts.img.attr('src', opts.editUrl);
         opts.img.triggerHandler('query', [opts.editQuery]);
         if (opts.onchange != null) opts.onchange(opts.api);
@@ -218,6 +221,7 @@
     var setUrl = function (opts, url, silent) {
         opts.editQuery = new ImageResizing.ResizeSettings(url);
         opts.editUrl = url;
+        setloading(opts, true, true);
         opts.img.attr('src', url);
         if (!silent) {
             opts.img.triggerHandler('query', [new ImageResizing.ResizeSettings(opts.editQuery)]);
@@ -300,6 +304,18 @@
         opts.imgDiv.css('padding-left', 0); //undo horizontal align fix
         opts.imgDiv.css('text-align', 'center');
         opts.imgDiv.css('height', 'auto');
+    };
+    var setloading = function (opts, loading, stopOnImageLoad) {
+
+        opts.container.removeClass('imagestudio-loading');
+        if (loading) {
+            opts.container.addClass('imagestudio-loading');
+            var stop = function () {
+                opts.container.removeClass('imagestudio-loading');
+                opts.img.unbind('load', stop);
+            };
+            if (stopOnImageLoad) opts.img.bind('load', stop);
+        }
     };
 
     //Adds a pane for rotating and flipping the source image
@@ -465,6 +481,7 @@
                 //Show buttons
                 $a([btnCancel, btnDone, label, ratio]).show();
                 cl.cropping = true;
+                setloading(opts, false);
             });
 
         }
@@ -495,6 +512,9 @@
         }
 
         var btnCrop = button(opts, 'crop_crop', null, function () {
+
+            setloading(opts, true, false);
+
             //Hide the reset and crop button, lock the accordion
             $a([btnReset, btnCrop]).hide();
             lockAccordion(opts, c);
@@ -654,7 +674,9 @@
     };
 
     rp.beginEnter = function () {
+
         var o = this.opts;
+        setloading(o, true, false);
         var q = new ImageResizing.ResizeSettings(o.editQuery);
         q.remove(this.key);
         this.baseUrl = o.editPath + q.toQueryString(o.editWithSemicolons);
@@ -672,7 +694,9 @@
 
             freezeImage(cl.opts);
             cl.show();
+            setloading(cl.opts, false);
         }, function () {
+            setloading(cl.opts, false);
             if (cl.onEnterFail) cl.onEnterFail();
             cl.img.attr('src', o.editUrl);
         });
