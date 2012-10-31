@@ -149,3 +149,8 @@ Note that .getOptions() allows you to access references to the image, image wrap
 
         }
     };
+
+### Additional notes
+
+The `window.cachedJson` variable is used for cross-instance request caching.
+

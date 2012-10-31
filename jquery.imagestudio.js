@@ -32,6 +32,7 @@
             fliphorizontal: 'arrowthick-2-e-w',
             reset: 'cancel',
             autofix: 'image',
+            autowhite: 'image',
             blackwhite: 'image',
             sepia: 'image',
             negative: 'image'
@@ -52,6 +53,7 @@
             crop_done: 'Done',
             pane_adjust: 'Adjust Image',
             autofix: 'Auto-Fix',
+            autowhite: 'Auto-Balance',
             contrast: 'Contrast',
             saturation: 'Saturation',
             brightness: 'Brightness',
@@ -214,6 +216,7 @@
         opts.editUrl = opts.editPath + opts.editQuery.toQueryString(opts.editWithSemicolons);
         setloading(opts, true, true);
         opts.img.attr('src', opts.editUrl);
+        if (opts.img.prop('complete')) setloading(opts, false);
         opts.img.triggerHandler('query', [opts.editQuery]);
         if (opts.onchange != null) opts.onchange(opts.api);
         //console.log(opts.editQuery);
@@ -223,6 +226,7 @@
         opts.editUrl = url;
         setloading(opts, true, true);
         opts.img.attr('src', url);
+        if (opts.img.prop('complete')) setloading(opts, false);
         if (!silent) {
             opts.img.triggerHandler('query', [new ImageResizing.ResizeSettings(opts.editQuery)]);
             if (opts.onchange != null) opts.onchange(opts.api);
@@ -306,15 +310,18 @@
         opts.imgDiv.css('height', 'auto');
     };
     var setloading = function (opts, loading, stopOnImageLoad) {
+        if (!opts.imageLoadedHandler) {
+            opts.imageLoadedHandler = function () {
+                opts.container.removeClass('imagestudio-loading');
+                opts.img.unbind('load', opts.imageLoadedHandler);
+            };
+        }
 
         opts.container.removeClass('imagestudio-loading');
+        opts.img.unbind('load', opts.imageLoadedHandler);
         if (loading) {
             opts.container.addClass('imagestudio-loading');
-            var stop = function () {
-                opts.container.removeClass('imagestudio-loading');
-                opts.img.unbind('load', stop);
-            };
-            if (stopOnImageLoad) opts.img.bind('load', stop);
+            if (stopOnImageLoad) opts.img.bind('load', opts.imageLoadedHandler);
         }
     };
 
@@ -332,7 +339,7 @@
     //contrast/saturation/brightness adjustment
     var addAdjustPane = function (opts) {
         var c = $('<div></div>');
-        toggle(c, 'autofix', "a.equalize", opts);
+        toggle(c, 'autowhite', "a.balancewhite", opts);
         h3(opts, 'contrast', c);
         c.append(slider(opts, -1, 1, 0.001, "s.contrast"));
         h3(opts, 'saturation', c);
@@ -340,7 +347,7 @@
         h3(opts, 'brightness', c);
         c.append(slider(opts, -1, 1, 0.001, "s.brightness"));
         button(opts, 'reset', function (obj) {
-            obj.remove("s.contrast", "s.saturation", "s.brightness", "a.equalize");
+            obj.remove("s.contrast", "s.saturation", "s.brightness", "a.balancewhite");
         }).appendTo(c);
         return c;
     };
