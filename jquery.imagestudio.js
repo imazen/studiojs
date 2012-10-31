@@ -497,7 +497,7 @@
         var btnCrop = button(opts, 'crop_crop', null, function () {
             //Hide the reset and crop button, lock the accordion
             $a([btnReset, btnCrop]).hide();
-            lockAccordion(opts.accordion, c);
+            lockAccordion(opts, c);
 
 
             //Save the original crop values and URL

@@ -292,7 +292,7 @@ ir.Utils.toggleFlip = function (originalValue, togglex, toggley) {
 
 ir.Utils.toBool = function (val, defaultValue) {
     if (val === null || val === undefined) return (defaultValue == true);
-    val = val.toLowerCase();
+    if (val.toLowerCase) val = val.toLowerCase();
     if (val == "false") return false;
     if (val == "0") return false;
     if (val == "no") return false;
