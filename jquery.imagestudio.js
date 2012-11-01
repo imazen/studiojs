@@ -6,6 +6,7 @@
     //$('obj').ImageStudio('api').setOptions({url:'newimageurl.jpg'}); //Yes, you can switch images like this.. as long as you're not in the middle of cropping. That's not supported yet.
     //$('obj').ImageStudio('api').getOptions();
     //$('obj').ImageStudio('api').destroy();
+    //labels and icon values cannot be updated after initialization. 
     var defaults = {
         url: null, //The image URL to load for editing. 
         width: null, //To set the width of the area
@@ -13,8 +14,8 @@
         height: 560, //To constrain the height of the area.
         panes: ['rotateflip', 'crop', 'adjust', 'effects', 'redeye', 'carve', 'faces'], //A list of panes to display, in order. 
         editingServer: null, //If set, an alternate server will be used during editing. For example, using cloudfront during editing is counter productive
-        editWithSemicolons: false, //If true, semicolon notation will be used with the editing server. 
-        finalWithSemicolons: false, //If true, semicolons will be used in the final URLs. Defaults to true if the input URL uses semicolons.
+        editWithSemicolons: null, //If true, semicolon notation will be used with the editing server. 
+        finalWithSemicolons: null, //If true, semicolons will be used in the final URLs. Defaults to true if the input URL uses semicolons.
         //A list of commands to temporarily remove from the URL during editing so that position-dependent operations aren't affected.
         //Any commands used by the editor should be in here also, such as 'cache', 'memcache', 'maxwidth',and 'maxheight'
         suspendKeys: ['width', 'height', 'maxwidth', 'maxheight',
@@ -92,8 +93,6 @@
 
         var processOptions = function (options) {
             var defs = $.extend(true, {}, defaults);
-            if (options.url.indexOf('?') < 0 && options.url.indexOf(';') > -1) defs.finalWithSemicolons = true;
-            defs.editWithSemicolons = defs.finalWithSemicolons;
             if (options.labels) defs.labels = $.extend(true, defs.labels, options.labels);
             if (options.icons) defs.icons = $.extend(true, defs.icons, options.icons);
             return $.extend(defs, options);
@@ -111,7 +110,7 @@
                     return;
                 }
                 // Otherwise, we just reset the options...
-                else div.data('ImageStudio').setOptions(processOptions(options));
+                else div.data('ImageStudio').setOptions(options);
             } else {
                 div.data('ImageStudio', init(div, processOptions(options)));
             }
@@ -139,30 +138,51 @@
         opts.imgDiv = idiv;
         opts.container = div;
         opts.accordion = a;
-        var updateOptions = function () {
-            if (opts.width) { div.width(opts.width); }
-            if (opts.height) div.height(opts.height);
-            if (opts.height) a.height(opts.height);
-            if (opts.accordionWidth) { a.width(opts.accordionWidth); atd.width(opts.accordionWidth); }
-            opts.original = ImageResizing.Utils.parseUrl(opts.url);
-            opts.editPath = opts.original.path;
-            if (opts.editingServer) opts.editPath = ImageResizing.Utils.changeServer(opts.editPath, opts.editingServer);
+        var updateOptions = function (changedOpts) {
+            //Called by both init and setOptions.
+            var o = changedOpts;
+            //When init calls, 'changedOpts' and 'opts' reference the same object
+            var isUpdate = (o != opts);
+            //See if we can skip the URL update.
+            var skipUrlUpdate = isUpdate && (!o.url || o.url == opts.url);
+            //If we're updating the URL, see if we are using semicolons, and set appropriate properties
+            if (!skipUrlUpdate && o.url.indexOf('?') < 0 && o.url.indexOf(';') > -1 && (o.finalWithSemicolons === undefined || o.finalWithSemicolons == null)) o.finalWithSemicolons = true;
+            if (o.finalWithSemicolons && _.all([o.editWithSemicolons, o.editingServer, opts.editWithSemicolons, opts.editingServer], function (v) { return v === null || v === undefined; }))
+                o.editWithSemicolons = true;
 
-            opts.originalQuery = opts.original.obj;
-            opts.filteredQuery = new ImageResizing.ResizeSettings(opts.originalQuery);
-            opts.suspendedItems = opts.filteredQuery.remove(opts.suspendKeys);
-            var withConstraints = new ImageResizing.ResizeSettings(opts.filteredQuery);
-            withConstraints.maxwidth = div.width() - opts.accordionWidth - 30;
-            withConstraints.maxheight = opts.height;
-            withConstraints.mergeWith(opts.editingCommands, true);
+            //If this is an update, not an init, override old values with new ones.
+            if (isUpdate) $.extend(opts, o);
 
-            opts.editQuery = withConstraints;
-            opts.editUrl = opts.editPath + withConstraints.toQueryString(opts.editWithSemicolons);
 
-            img.attr('src', opts.editUrl);
-            img.triggerHandler('query', [new ImageResizing.ResizeSettings(opts.editUrl)]);
+            if (o.width) { div.width(o.width); }
+            if (o.height) div.height(o.height);
+            if (o.height) a.height(o.height);
+            if (o.accordionWidth) { a.width(o.accordionWidth); atd.width(o.accordionWidth); }
 
-        }; updateOptions();
+            if (!skipUrlUpdate) {
+                opts.original = ImageResizing.Utils.parseUrl(opts.url);
+                opts.editPath = opts.original.path;
+                if (opts.editingServer) opts.editPath = ImageResizing.Utils.changeServer(opts.editPath, opts.editingServer);
+
+                opts.originalQuery = opts.original.obj;
+                opts.filteredQuery = new ImageResizing.ResizeSettings(opts.originalQuery);
+                opts.suspendedItems = opts.filteredQuery.remove(opts.suspendKeys);
+                var withConstraints = new ImageResizing.ResizeSettings(opts.filteredQuery);
+                withConstraints.maxwidth = div.width() - opts.accordionWidth - 30;
+                withConstraints.maxheight = opts.height;
+                withConstraints.mergeWith(opts.editingCommands, true);
+
+                opts.editQuery = withConstraints;
+                opts.editUrl = opts.editPath + withConstraints.toQueryString(opts.editWithSemicolons);
+
+                img.attr('src', opts.editUrl);
+                //This event lets 'involved' panes like crop, object removal, faces, red-eye, etc. exit when we change the source image.
+                img.triggerHandler('sourceImageChanged', [opts.url]);
+                //This event keeps all sliders, toggles, etc in sync
+                img.triggerHandler('query', [new ImageResizing.ResizeSettings(opts.editUrl)]);
+            }
+
+        }; updateOptions(opts);
 
         //Add requested panes
         var panes = { 'rotateflip': addRotateFlipPane, 'crop': addCropPane, 'adjust': addAdjustPane, 'redeye': addRedEyePane, 'carve': addCarvePane, 'effects': addEffectsPane, 'faces': addFacesPane };
@@ -177,8 +197,7 @@
         var api = {
             getOptions: function () { return opts; },
             setOptions: function (newOpts) {
-                $.extend(opts, newOpts);
-                updateOptions();
+                updateOptions(newOpts);
             },
             getStatus: function (params) {
                 params = $.extend(params, { 'restoreSuspendedCommands': true, 'removeEditingConstraints': true, 'useEditingServer': false });
@@ -398,6 +417,7 @@
                 cl.w = image.width;
                 cl.h = image.height;
                 startCarve();
+                cl.active = true;
             };
             image.src = cl.baseUrl;
 
@@ -415,13 +435,13 @@
             q["carve.data"] = cl.packedData;
             return o.editPath + q.toQueryString(o.editWithSemicolons);
         }
-        //Used for cancel and done buttons.
-        var stopDrawing = function (save) {
+        //Used for cancel, done buttons, and sourceImageChanged event.
+        var stopDrawing = function (save, norestore) {
             cl.packedData = cl.img.canvasDraw('pack');
             cl.img.canvasDraw('unload');
             if (save)
                 setUrl(opts, getFixedUrl(), false);
-            else
+            else if (!norestore)
                 cl.img.attr('src', opts.editUrl);
             done.hide();
             cancel.hide();
@@ -430,12 +450,15 @@
 
             unFreezeImage(opts);
             opts.accordion.accordion("enable");
+            cl.active = false;
         };
 
         var cancel = button(opts, 'cancel', null, function () { stopDrawing(false); }).appendTo(c).hide();
         var done = button(opts, 'done', null, function () { stopDrawing(true); }).appendTo(c).hide();
         //Just remove carve.data to reset everything!
         var reset = button(opts, 'reset', function (obj) { obj.remove("carve.data"); }).appendTo(c);
+        //Handle source image changes by exiting
+        opts.img.bind('sourceImageChanged', function () { if (cl.active) stopDrawing(false,true); });
         return c;
     };
     //Adds a pane for cropping
@@ -579,6 +602,9 @@
         var btnCancel = button(opts, 'crop_cancel', null, function () {
             stopCrop(false);
         }).appendTo(grouper).hide();
+        //Handle source image changes by exiting
+        opts.img.bind('sourceImageChanged', function () { if (cl.cropping) stopCrop(false, true); });
+
         var btnDone = button(opts, 'crop_done', null, function () {
             stopCrop(true);
         }).appendTo(grouper).hide();
@@ -622,7 +648,12 @@
     };
 
     //Used for red-eye and face rectangle overlay management
-    var RectOverlayMgr = function (opts, key, origWidthKey, origHeightKey) { this.opts = opts; this.img = opts.img; this.key = key; this.origWidthKey = origWidthKey; this.origHeightKey = origHeightKey; };
+    var RectOverlayMgr = function (opts, key, origWidthKey, origHeightKey) {
+        this.opts = opts; this.img = opts.img; this.key = key; this.origWidthKey = origWidthKey; this.origHeightKey = origHeightKey;
+        //Handle source image changes by exiting
+        var cl = this;
+        opts.img.bind('sourceImageChanged', function () { if (cl.active) cl.cancel(); });
+    };
     var rp = RectOverlayMgr.prototype;
     rp.hide = function () {
         $(this.img).show();
@@ -677,6 +708,7 @@
         else
             this.img.attr('src', this.opts.editUrl);
         unFreezeImage(this.opts);
+        this.active = false;
         if (this.onExitComplete) this.onExitComplete(save);
     };
 
@@ -691,6 +723,7 @@
         this.jsonUrl = this.getJsonUrl(o.editPath, q);
 
         var cl = this;
+        cl.loading = true;
         getCachedJson(this.jsonUrl, function (data) {
             if (cl.onEnterComplete) cl.onEnterComplete();
             cl.info = data;
@@ -702,8 +735,10 @@
             freezeImage(cl.opts);
             cl.show();
             setloading(cl.opts, false);
+            cl.active = true;
         }, function () {
             setloading(cl.opts, false);
+            cl.loading = false;
             if (cl.onEnterFail) cl.onEnterFail();
             cl.img.attr('src', o.editUrl);
         });
