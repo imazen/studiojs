@@ -63,11 +63,19 @@ Returns a { url, path, query } object, where 'url' and 'path' are strings, and q
 
 ### Updating and querying options
 
-Most options can be adjusted at runtime, although there are exceptions. Options are applied 'over' the current set of options; no need to duplicate previous settings.
+The following options can be adjusted at runtime:
+
+* url
+* width
+* accordionWidth
+* height
+* onchange
+
+All others can only be set during initialization. Options are applied 'over' the current set of options; no need to duplicate previous settings.
 
 
     //$('obj').ImageStudio('api').setOptions({height:600});
-    //$('obj').ImageStudio('api').setOptions({url:'newimageurl.jpg'}); //Yes, you can switch images like this.. as long as you're not in the middle of cropping. That's not supported yet.
+    //$('obj').ImageStudio('api').setOptions({url:'newimageurl.jpg'}); //Yes, you can switch images like this.
     //$('obj').ImageStudio('api').getOptions();
 
 Note that .getOptions() allows you to access references to the image, image wrapper div and accordion. (.img, .imgDiv, .accordion). These names may change, as they are internal. 

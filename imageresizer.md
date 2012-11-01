@@ -61,6 +61,8 @@ Merges the following key aliases
 * srcflip -> sflip
 * w -> width
 * h -> height
+* r.ih -> oh
+* r.iw -> ow
 
 Returns self. Automatically called after parsing, but not after mergeWith
 
