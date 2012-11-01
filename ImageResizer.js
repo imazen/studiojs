@@ -72,6 +72,8 @@ rs.prototype.normalize = function () {
     this.undup('sflip', 'srcflip');
     this.undup('width', 'w');
     this.undup('height', 'h');
+    this.undup('ow', 'r.iw');
+    this.undup('oh', 'r.ih');
     return this;
 };
 
@@ -173,29 +175,26 @@ rs.prototype.rotateFlipCoords = function (rot, fx, fy) {
 
 
     //Rotate rect arrays (eyes and faces)
-    var sets = [['r.eyes', 'r.iw', 'r.ih'],
-                ['f.rects', 'r.iw', 'r.ih']];
-
-    for (var i = 0; i < sets.length; i++) {
-        var set = sets[i];
-        if (this[set[0]] && this[set[1]] && this[set[2]]) {
-            var h = parseInt(this[set[2]]);
-            var w = parseInt(this[set[1]]);
-
-            var rects = this.getRectArray(set[0]);
+    var w = parseInt(this.ow) + 0;
+    var h = parseInt(this.oh) + 0;
+    var keys = ['f.rects', 'r.eyes'];
+    for (var j = 0; j < keys.length; j++) {
+        var key = keys[j];
+        if (this[key] && w && h) {
+            var rects = this.getRectArray(key);
             for (var i = 0; i < rects.length; i++) {
                 var r = rects[i];
                 var newr = ir.Utils.flipRotateRect(r.X, r.Y, r.X2, r.Y2, w, h, oldAngle, oldAngle + rot, oldFlip.x, oldFlip.x ^ fx, oldFlip.y, oldFlip.y ^ fy);
 
                 rects[i] = { X: newr.x1, Y: newr.y1, X2: newr.x2, Y2: newr.y2, Accuracy: r.Accuracy };
 
-                this[set[2]] = newr.yunits;
-                this[set[1]] = newr.xunits;
+                this.oh = newr.yunits;
+                this.ow = newr.xunits;
             }
-            this.setRectArray(set[0], rects);
+            this.setRectArray(key, rects);
         }
     }
-    
+
 
     var c = this.getCrop();
     //Only rotate if all items are present.
