@@ -160,14 +160,14 @@
             if (o.accordionWidth) { a.width(o.accordionWidth); atd.width(o.accordionWidth); }
 
             if (!skipUrlUpdate) {
-                opts.original = ImageResizing.Utils.parseUrl(opts.url);
+                opts.original = ImageResizer.Utils.parseUrl(opts.url);
                 opts.editPath = opts.original.path;
-                if (opts.editingServer) opts.editPath = ImageResizing.Utils.changeServer(opts.editPath, opts.editingServer);
+                if (opts.editingServer) opts.editPath = ImageResizer.Utils.changeServer(opts.editPath, opts.editingServer);
 
                 opts.originalQuery = opts.original.obj;
-                opts.filteredQuery = new ImageResizing.ResizeSettings(opts.originalQuery);
+                opts.filteredQuery = new ImageResizer.Instructions(opts.originalQuery);
                 opts.suspendedItems = opts.filteredQuery.remove(opts.suspendKeys);
-                var withConstraints = new ImageResizing.ResizeSettings(opts.filteredQuery);
+                var withConstraints = new ImageResizer.Instructions(opts.filteredQuery);
                 withConstraints.maxwidth = div.width() - opts.accordionWidth - 30;
                 withConstraints.maxheight = opts.height;
                 withConstraints.mergeWith(opts.editingCommands, true);
@@ -179,7 +179,7 @@
                 //This event lets 'involved' panes like crop, object removal, faces, red-eye, etc. exit when we change the source image.
                 img.triggerHandler('sourceImageChanged', [opts.url]);
                 //This event keeps all sliders, toggles, etc in sync
-                img.triggerHandler('query', [new ImageResizing.ResizeSettings(opts.editUrl)]);
+                img.triggerHandler('query', [new ImageResizer.Instructions(opts.editUrl)]);
             }
 
         }; updateOptions(opts);
@@ -203,7 +203,7 @@
                 params = $.extend(params, { 'restoreSuspendedCommands': true, 'removeEditingConstraints': true, 'useEditingServer': false });
                 var path = params.useEditingServer ? opts.editPath : opts.original.path;
 
-                var q = new ImageResizing.ResizeSettings(opts.editQuery);
+                var q = new ImageResizer.Instructions(opts.editQuery);
                 if (params.removeEditingConstraints) {
                     q.remove(opts.suspendKeys);
                 }
@@ -230,7 +230,7 @@
 
     //Provides a callback to edit the querystring inside
     var edit = function (opts, callback) {
-        opts.editQuery = new ImageResizing.ResizeSettings(opts.editQuery);
+        opts.editQuery = new ImageResizer.Instructions(opts.editQuery);
         callback(opts.editQuery);
         opts.editUrl = opts.editPath + opts.editQuery.toQueryString(opts.editWithSemicolons);
         setloading(opts, true, true);
@@ -241,13 +241,13 @@
         //console.log(opts.editQuery);
     };
     var setUrl = function (opts, url, silent) {
-        opts.editQuery = new ImageResizing.ResizeSettings(url);
+        opts.editQuery = new ImageResizer.Instructions(url);
         opts.editUrl = url;
         setloading(opts, true, true);
         opts.img.attr('src', url);
         if (opts.img.prop('complete')) setloading(opts, false);
         if (!silent) {
-            opts.img.triggerHandler('query', [new ImageResizing.ResizeSettings(opts.editQuery)]);
+            opts.img.triggerHandler('query', [new ImageResizer.Instructions(opts.editQuery)]);
             if (opts.onchange != null) opts.onchange(opts.api);
         }
     }
@@ -406,7 +406,7 @@
             reset.hide(); start.hide();
             lockAccordion(opts, c);
             var o = opts;
-            var q = new ImageResizing.ResizeSettings(o.editQuery);
+            var q = new ImageResizer.Instructions(o.editQuery);
             cl.packedData = o.editQuery["carve.data"];
             q.remove("carve.data");
             cl.baseUrl = o.editPath + q.toQueryString(o.editWithSemicolons);
@@ -431,7 +431,7 @@
         };
         var getFixedUrl = function () {
             var o = cl.opts;
-            var q = new ImageResizing.ResizeSettings(o.editQuery);
+            var q = new ImageResizer.Instructions(o.editQuery);
             q["carve.data"] = cl.packedData;
             return o.editPath + q.toQueryString(o.editWithSemicolons);
         }
@@ -555,7 +555,7 @@
             cl.previousUrl = opts.editUrl;
 
             //Create an uncropped URL
-            var q = new ImageResizing.ResizeSettings(cl.opts.editQuery);
+            var q = new ImageResizer.Instructions(cl.opts.editQuery);
             q.remove("crop", "cropxunits", "cropyunits");
             var uncroppedUrl = cl.opts.editPath + q.toQueryString(cl.opts.editWithSemicolons);
 
@@ -593,7 +593,7 @@
             };
             if (areAllEmpty(coords, ['x', 'y', 'x2', 'y2'])) {
                 if (r != 0 && r != cl.img.width() / cl.img.height()) {
-                    cl.jcrop_reference.setSelect(ImageResizing.Utils.getRectOfRatio(r, cl.img.width(), cl.img.height()));
+                    cl.jcrop_reference.setSelect(ImageResizer.Utils.getRectOfRatio(r, cl.img.width(), cl.img.height()));
                 } else cl.jcrop_reference.release();
             }
             cl.jcrop_reference.focus();
@@ -690,7 +690,7 @@
         });
     };
     rp.getFixedUrl = function () {
-        var q = new ImageResizing.ResizeSettings(this.opts.editQuery);
+        var q = new ImageResizer.Instructions(this.opts.editQuery);
         q.setRectArray(this.key, this.rects);
         q[this.origWidthKey] = this.info.ow;
         q[this.origHeightKey] = this.info.oh;
@@ -716,7 +716,7 @@
 
         var o = this.opts;
         setloading(o, true, false);
-        var q = new ImageResizing.ResizeSettings(o.editQuery);
+        var q = new ImageResizer.Instructions(o.editQuery);
         q.remove(this.key);
         this.baseUrl = o.editPath + q.toQueryString(o.editWithSemicolons);
         o.img.attr('src', this.baseUrl); //Undo current red-eye fixes
