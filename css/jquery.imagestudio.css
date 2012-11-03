@@ -1,4 +1,6 @@
 
 .imagestudio-loading td.imageCell{background:url(loading.gif) no-repeat bottom center;}
 
+td.imageCell{padding-bottom:28px};
+
 .imagestudio .red-eye-rect:hover {border-color:#fff!important; background: url(delete-rect.png) no-repeat top right; 

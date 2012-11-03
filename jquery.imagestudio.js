@@ -179,7 +179,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
                 opts.suspendedItems = opts.filteredQuery.remove(opts.suspendKeys);
                 var withConstraints = new ImageResizer.Instructions(opts.filteredQuery);
                 withConstraints.maxwidth = div.width() - opts.accordionWidth - 30;
-                withConstraints.maxheight = opts.height;
+                withConstraints.maxheight = opts.height - 28;
                 withConstraints.mergeWith(opts.editingCommands, true);
 
                 opts.editQuery = withConstraints;
