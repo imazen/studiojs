@@ -202,7 +202,9 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
         }
         //Activate accordion
-        a.accordion({ fillSpace: true });
+        //Animated can be true, false or a string
+        var animated = (opts.animated.toLowerCase() === 'true') ? true : (opts.animated.toLowerCase() === 'false') ? false : opts.animated;
+        a.accordion({ fillSpace: true, animated: animated});
 
         var api = {
             getOptions: function () { return opts; },
