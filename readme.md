@@ -8,19 +8,19 @@ All client-side components are released under the MIT license by their respectiv
 
 For a live demo,  [click here](http://studio.imageresizing.net/studio.html).
 
-If you are upgrading, please [check the changelog for migration notes](https://github.com/nathanaeljones/studiojs/blob/master/changelog.md). Some backwards-incompatible changes have been made.
+If you are upgrading, please [check the changelog for migration notes](https://github.com/imazen/studiojs/blob/master/changelog.md). Some backwards-incompatible changes have been made.
 
-If you're new to StudioJS, the [tutorial](https://github.com/nathanaeljones/studiojs/blob/master/tutorial.md) is an appropriate place to start.
+If you're new to StudioJS, the [tutorial](https://github.com/imazen/studiojs/blob/master/tutorial.md) is an appropriate place to start.
 
 ## Documentation Links
 
-* [Tutorial](https://github.com/nathanaeljones/studiojs/blob/master/tutorial.md)
-* [Migration notes](https://github.com/nathanaeljones/studiojs/blob/master/changelog.md)
-* [ImageResizer.js docs](https://github.com/nathanaeljones/studiojs/blob/master/imageresizer.md)
+* [Tutorial](https://github.com/imazen/studiojs/blob/master/tutorial.md)
+* [Migration notes](https://github.com/imazen/studiojs/blob/master/changelog.md)
+* [ImageResizer.js docs](https://github.com/imazen/studiojs/blob/master/imageresizer.md)
 * [Jcrop readme](https://github.com/tapmodo/Jcrop)
 * [Jcrop website & docs](http://deepliquid.com/content/Jcrop.html)
-* [jquery.jcrop.preview.js docs](https://github.com/nathanaeljones/studiojs/blob/master/jcrop-preview.md)
-* [jquery.imagestudio.js docs](https://github.com/nathanaeljones/studiojs/blob/master/imagestudio.md)
+* [jquery.jcrop.preview.js docs](https://github.com/imazen/studiojs/blob/master/jcrop-preview.md)
+* [jquery.imagestudio.js docs](https://github.com/imazen/studiojs/blob/master/imagestudio.md)
 
 
 ## Overview of files
