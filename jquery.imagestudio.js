@@ -356,51 +356,157 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
         }
     };
 
+    var enableSiblingResetButton = function(btn)
+    {
+        $(btn).siblings(".button_reset").first().removeAttr("disabled");
+    }
+
+    var disableResetButton = function(btn) {
+        $(btn).attr("disabled", "disabled");
+    }
+
     //Adds a pane for rotating and flipping the source image
     var addRotateFlipPane = function (opts) {
         var c = $('<div></div>');
-        button(opts, 'rotateleft', function (obj) { obj.increment("srotate", -90, 360); }).appendTo(c);
-        button(opts, 'rotateright', function (obj) { obj.increment("srotate", 90, 360); }).appendTo(c);
-        button(opts, 'flipvertical', function (obj) { obj.toggle("sflip.y"); }).appendTo(c);
-        button(opts, 'fliphorizontal', function (obj) { obj.toggle("sflip.x"); }).appendTo(c);
-        button(opts, 'reset', function (obj) { obj.resetSourceRotateFlip() }).appendTo(c);
+
+        var left = button(opts, 'rotateleft', function (obj) {
+            obj.increment("srotate", -90, 360);
+        });
+        left.click(function() {
+            enableSiblingResetButton(this);
+        });
+        left.appendTo(c);
+
+        var right = button(opts, 'rotateright', function(obj) { obj.increment("srotate", 90, 360); });
+        right.click(function () {
+            enableSiblingResetButton(this);
+        });
+        right.appendTo(c);
+
+        var vert = button(opts, 'flipvertical', function(obj) { obj.toggle("sflip.y"); });
+        vert.click(function () {
+            enableSiblingResetButton(this);
+        });
+        vert.appendTo(c);
+
+        var horiz = button(opts, 'fliphorizontal', function(obj) { obj.toggle("sflip.x"); });
+        horiz.click(function () {
+            enableSiblingResetButton(this);
+        });
+        horiz.appendTo(c);
+
+        var reset = button(opts, 'reset', function (obj) {
+            obj.resetSourceRotateFlip();
+        }).attr("disabled", "disabled");
+        reset.click(function() {
+            disableResetButton(this);
+        });
+        reset.appendTo(c);
 
         return c;
     };
     //contrast/saturation/brightness adjustment
     var addAdjustPane = function (opts) {
         var c = $('<div></div>');
-        toggle(c, 'autowhite', "a.balancewhite", opts);
+
+        var auto = toggle(c, 'autowhite', "a.balancewhite", opts);
+        auto.change(function() {
+            enableSiblingResetButton(this);
+        });
+
         h3(opts, 'contrast', c);
-        c.append(slider(opts, -1, 1, 0.001, "s.contrast"));
+        var contrast = slider(opts, -1, 1, 0.001, "s.contrast");
+        contrast.on("slidechange", function () {
+            enableSiblingResetButton(this);
+        });
+        c.append(contrast);
+
         h3(opts, 'saturation', c);
-        c.append(slider(opts, -1, 1, 0.001, "s.saturation"));
+        var sat = slider(opts, -1, 1, 0.001, "s.saturation");
+        sat.on("slidechange", function () {
+            enableSiblingResetButton(this);
+        });
+        c.append(sat);
+
         h3(opts, 'brightness', c);
-        c.append(slider(opts, -1, 1, 0.001, "s.brightness"));
-        button(opts, 'reset', function (obj) {
+        var bri = slider(opts, -1, 1, 0.001, "s.brightness");
+        bri.on("slidechange", function () {
+            enableSiblingResetButton(this);
+        });
+        c.append(bri);
+
+        var reset = button(opts, 'reset', function(obj) {
             obj.remove("s.contrast", "s.saturation", "s.brightness", "a.balancewhite");
-        }).appendTo(c);
+        }).attr("disabled", "disabled");
+        reset.click(function() {
+            disableResetButton(this);
+        });
+        reset.appendTo(c);
+
         return c;
     };
     //Effects and noise removal
     var addEffectsPane = function (opts) {
         var c = $('<div></div>');
-        toggle(c, 'blackwhite', "s.grayscale", opts);
-        toggle(c, "sepia", "s.sepia", opts);
-        toggle(c, "negative", "s.invert", opts);
+
+        var bla = toggle(c, 'blackwhite', "s.grayscale", opts);
+        bla.change(function () {
+            enableSiblingResetButton(this);
+        });
+
+        var sep = toggle(c, "sepia", "s.sepia", opts);
+        sep.change(function () {
+            enableSiblingResetButton(this);
+        });
+
+        var neg = toggle(c, "negative", "s.invert", opts);
+        neg.change(function () {
+            enableSiblingResetButton(this);
+        });
+
         h3(opts, 'sharpen', c);
-        c.append(slider(opts, 0, 15, 1, "a.sharpen"));
+        var sha = slider(opts, 0, 15, 1, "a.sharpen");
+        sha.on("slidechange", function () {
+            enableSiblingResetButton(this);
+        });
+        c.append(sha);
+
         h3(opts, 'noiseremoval', c);
-        c.append(slider(opts, 0, 100, 1, "a.removenoise"));
+        var noi = slider(opts, 0, 100, 1, "a.removenoise");
+        noi.on("slidechange", function () {
+            enableSiblingResetButton(this);
+        });
+        c.append(noi);
+
         h3(opts, 'oilpainting', c);
-        c.append(slider(opts, 0, 25, 1, "a.oilpainting"));
+        var oil = slider(opts, 0, 25, 1, "a.oilpainting");
+        oil.on("slidechange", function () {
+            enableSiblingResetButton(this);
+        });
+        c.append(oil);
+
         h3(opts, 'posterize', c);
-        c.append(slider(opts, 0, 255, 1, "a.posterize"));
+        var pos = slider(opts, 0, 255, 1, "a.posterize");
+        pos.on("slidechange", function () {
+            enableSiblingResetButton(this);
+        });
+        c.append(pos);
+
         h3(opts, 'blur', c);
-        c.append(slider(opts, 0, 40, 1, "a.blur"));
-        button(opts, 'reset', function (obj) {
+        var blu = slider(opts, 0, 40, 1, "a.blur");
+        blu.on("slidechange", function () {
+            enableSiblingResetButton(this);
+        });
+        c.append(blu);
+
+        var reset = button(opts, 'reset', function(obj) {
             obj.remove("a.sharpen", "a.removenoise", "a.oilpainting", "a.posterize", "s.grayscale", "s.sepia", "s.invert", "a.blur", "a.radiusunits");
-        }).appendTo(c);
+        }).attr("disabled", "disabled");
+        reset.click(function () {
+            disableResetButton(this);
+        });
+        reset.appendTo(c);
+
         return c;
     };
 
