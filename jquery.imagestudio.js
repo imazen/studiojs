@@ -699,7 +699,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
         var ratios = opts.cropratios;
         for (var i = 0; i < ratios.length; i++)
             $('<option value="' + ratios[i][0].toString() + '">' + ratios[i][1] + '</option>').appendTo(ratio);
-        ratio.appendTo(c).val(0).hide();
+        var initialRatio = ratios.length ? ratios[0][0] : 0;
+        ratio.appendTo(c).val(initialRatio).hide();
         ratio.change(function () {
             var r = getRatio();
             var coords = cl.jcrop_reference.tellSelect();
